@@ -51,9 +51,9 @@ if isToolbox == 7
     % Apply replaceExisting argument
     if isempty(replaceExisting)
         choice = questdlg(sprintf(...
-            ['MATLAB Root already contains the Universal Robot Simulation Toolbox.\n',...
+            ['MATLAB Root already contains the Universal Robot Qt Toolbox.\n',...
             'Would you like to replace the existing toolbox?']),...
-            'Replace Existing Universal Robot Simulation Toolbox','Yes','No','Cancel','Yes');
+            'Replace Existing Universal Robot Qt Toolbox','Yes','No','Cancel','Yes');
     elseif replaceExisting
         choice = 'Yes';
     else
@@ -85,9 +85,9 @@ end
 %% Create Scorbot Toolbox Path
 [isDir,msg,msgID] = mkdir(toolboxRoot);
 if isDir
-    fprintf('Universal Robot Simulation toolbox folder created successfully:\n\t"%s"\n',toolboxRoot);
+    fprintf('Universal Robot Qt Toolbox folder created successfully:\n\t"%s"\n',toolboxRoot);
 else
-    fprintf('Failed to create Scorbot Toolbox folder:\n\t"%s"\n',toolboxRoot);
+    fprintf('Failed to create Universal Robot Qt Toolbox folder:\n\t"%s"\n',toolboxRoot);
     fprintf(adminSolution);
     error(msgID,msg);
 end
@@ -163,6 +163,92 @@ for i = 1:n
     waitbar(i/n,wb);
 end
 set(wb,'Visible','off');
+delete(wb);
+
+%% Migrate toolbox folder contents
+toolboxContent = 'URQtSupport';
+% Make directory 
+[isDir,msg,msgID] = mkdir( fullfile(toolboxRoot,toolboxContent) );
+if isDir
+    fprintf('Universal Robot Qt Toolbox support folder created successfully:\n\t"%s"\n',...
+        fullfile(toolboxRoot,toolboxContent));
+else
+    fprintf('Failed to create Universal Robot Qt Toolbox support folder:\n\t"%s"\n',...
+        fullfile(toolboxRoot,toolboxContent) );
+    fprintf(adminSolution);
+    error(msgID,msg);
+end
+
+if ~isdir(toolboxContent)
+    error(sprintf(...
+        ['Change your working directory to the location of "installURQtToolbox.m".\n',...
+         '\n',...
+         'If this problem persists:\n',...
+         '\t(1) Unzip your original download of "URQtToolbox" into a new directory\n',...
+         '\t(2) Open a new instance of MATLAB "as administrator"\n',...
+         '\t\t(a) Locate MATLAB shortcut\n',...
+         '\t\t(b) Right click\n',...
+         '\t\t(c) Select "Run as administrator"\n',...
+         '\t(3) Change your "working directory" to the location of "installURQtToolbox.m"\n',...
+         '\t(4) Enter "installURQtToolbox" (without quotes) into the command window\n',...
+         '\t(5) Press Enter.']));
+end
+files = dir(toolboxContent);
+wb = waitbar(0,'Copying Universal Robot Qt Toolbox support contents...');
+n = numel(files);
+fprintf('Copying Universal Robot Toolbox for MATLAB leveraging Qt contents:\n');
+for i = 1:n
+    % source file location
+    source = fullfile(toolboxContent,files(i).name);
+    % destination location
+    destination = fullfile(toolboxRoot,toolboxContent);
+    if files(i).isdir
+        switch files(i).name
+            case '.'
+                %Ignore
+            case '..'
+                %Ignore
+            otherwise
+                fprintf('\t%s...',files(i).name);
+                nDestination = fullfile(destination,files(i).name);
+                [isDir,msg,msgID] = mkdir(nDestination);
+                if isDir
+                    [isCopy,msg,msgID] = copyfile(source,nDestination,'f');
+                    if isCopy
+                        fprintf('[Complete]\n');
+                    else
+                        bin = msg == char(10);
+                        msg(bin) = [];
+                        bin = msg == char(13);
+                        msg(bin) = [];
+                        fprintf('[Failed: "%s"]\n',msg);
+                    end
+                else
+                    bin = msg == char(10);
+                    msg(bin) = [];
+                    bin = msg == char(13);
+                    msg(bin) = [];
+                    fprintf('[Failed: "%s"]\n',msg);
+                end
+        end
+    else
+        fprintf('\t%s...',files(i).name);
+        [isCopy,msg,msgID] = copyfile(source,destination,'f');
+        
+        if isCopy == 1
+            fprintf('[Complete]\n');
+        else
+            bin = msg == char(10);
+            msg(bin) = [];
+            bin = msg == char(13);
+            msg(bin) = [];
+            fprintf('[Failed: "%s"]\n',msg);
+        end
+    end
+    waitbar(i/n,wb);
+end
+set(wb,'Visible','off');
+delete(wb);
 
 %% Save toolbox path
 %addpath(genpath(toolboxRoot),'-end');

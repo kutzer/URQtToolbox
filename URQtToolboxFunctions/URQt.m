@@ -253,7 +253,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Check if UR is currently moving
             msg = 'getarmdone';
             obj.sendMsg(msg);
-            out = read(TCp,1,'uint8');
+            out = receiveMsg(1,'uint8');
             if out == 1
                 % Motion is complete
                 tf = false;
@@ -353,8 +353,15 @@ classdef URQt < matlab.mixin.SetGet % Handle
             s = uint8(msg);
             write(obj.Client,s);
             % Wait for response
+            timeout = 10;
+            t0 = tic;
             while isempty(obj.Client.BytesAvailable)
                 % Waiting for response from server
+                t = toc(t0);
+                if t > timeout
+                    warning('TIMEOUT - No response received from server');
+                    break
+                end
             end
         end
         

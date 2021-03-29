@@ -150,28 +150,6 @@ classdef URQt < matlab.mixin.SetGet % Handle
             
             % Define Qt executable name
             obj.QtEXE = 'Roswell.exe';
-        end
-        
-        function delete(obj)
-            % Object destructor
-            
-        end
-    end % end methods
-    
-    % --------------------------------------------------------------------
-    % Initialization
-    % --------------------------------------------------------------------
-    methods(Access='public')
-        function Initialize(obj,varargin)
-            % Initialize initializes a Universal Robot simulation
-            %
-            % Initialize(obj)
-            %
-            % Initialize(obj,URmodel)
-            %
-            % Initialize(obj,URmodel,IP)
-            %
-            % Initialize(obj,URmodel,IP,Port)
             
             % Initialize Qt Interface
             fprintf('Starting Qt interface...');
@@ -199,6 +177,28 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 fprintf('SKIPPED\n');
                 fprintf('\tQt interface is already running.\n');
             end
+        end
+        
+        function delete(obj)
+            % Object destructor
+            
+        end
+    end % end methods
+    
+    % --------------------------------------------------------------------
+    % Initialization
+    % --------------------------------------------------------------------
+    methods(Access='public')
+        function Initialize(obj,varargin)
+            % Initialize initializes a Universal Robot simulation
+            %
+            % Initialize(obj)
+            %
+            % Initialize(obj,URmodel)
+            %
+            % Initialize(obj,URmodel,IP)
+            %
+            % Initialize(obj,URmodel,IP,Port)
             
             % Initialize IP and Port
             % TODO - allow user to specify IP and Port

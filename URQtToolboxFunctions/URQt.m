@@ -204,6 +204,15 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % TODO - allow user to specify IP and Port
             obj.IP = '127.0.0.1';
             obj.Port = 8897;
+            
+            % Initialize parameters
+            obj.MoveType = 'LinearJoint';
+            obj.JointAcc = deg2rad(80); % rad/s^2
+            obj.JointVel = deg2rad(60); % rad/s
+            obj.TaskAcc  = 100.0;       % mm/s^2
+            obj.TaskVel  = 100.0;       % mm/s
+            obj.BlendRadius = 0;        % mm
+            
             % TODO - specify and use terminator
             % TODO - specify terminator callback function
             fprintf('Initializing TCP Client: IP %s, Port %d...',...
@@ -213,13 +222,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             
             % Initialize arm
             obj.InitializeArm;
-            
-            % Initialize parameters
-            obj.MoveType = 'LinearJoint';
-            obj.JointAcc = 0.394;   % rad/s^2
-            obj.JointVel = 0.524;   % rad/s
-            obj.TaskAcc  = 100.0;   % mm/s^2
-            obj.TaskVel  = 100.0;   % mm/s
+
         end
     end % end methods
     
@@ -237,6 +240,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                     fprintf('READY');
                 case 1  % Arm is booting
                     fprintf('ARM BOOTING...');
+                    pause(30);
                     out = obj.receiveMsg(1,'uint8');
                     if out == 2
                         fprintf('READY');
@@ -439,7 +443,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 error('Joint vector must be specified as a 6-element array.');
             end
             
-            jmsg = fprintf('[%9.6f,%9.6f,%9.6f,%9.6f,%9.6f,%9.6f]',joints);
+            jmsg = sprintf('[%9.6f,%9.6f,%9.6f,%9.6f,%9.6f,%9.6f]',joints);
             switch obj.MoveType
                 case 'LinearJoint'
                     a = obj.JointAcc;           % rad/s^2
@@ -562,12 +566,12 @@ classdef URQt < matlab.mixin.SetGet % Handle
         
         function set.Task(obj,task)
             % movej([0,1.57,-1.57,3.14,-1.57,1.57],a=1.4, v=1.05, t=0, r=0)
-            if numel(joints) ~= 6
+            if numel(task) ~= 6
                 error('Task vector must be specified as a 6-element array.');
             end
             
             task(1:3) = task(1:3)./1000; % Convert from mm to m
-            tmsg = fprintf('[%9.6f,%9.6f,%9.6f,%9.6f,%9.6f,%9.6f]',task);
+            tmsg = sprintf('[%9.6f,%9.6f,%9.6f,%9.6f,%9.6f,%9.6f]',task);
             switch obj.MoveType
                 case 'LinearJoint'
                     a = obj.JointAcc;           % rad/s^2

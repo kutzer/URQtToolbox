@@ -5,6 +5,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %
     % URQt Methods
     %   Initialize  - Initialize the URQt object.
+    %   isMoving    - Determine whether the UR is currently moving
     %   WaitForMove - Wait until UR completes specified movement.
     %   Home        - Move URQt to home joint configuration.
     %   Stow        - Move URQt to stow joint configuration.
@@ -100,22 +101,17 @@ classdef URQt < matlab.mixin.SetGet % Handle
         ToolTask    % 1x6 array containing tool pose in task space
     end % end properties
     
+    properties(GetAccess='public', SetAccess='public')
+        MoveType    % String describing move type (LinearTask or LinearJoint)
+        JointAcc    % Joint acceleration of leading axis (rad/s^2)
+        JointVel    % Joint speed of leading axis (rad/s)
+        TaskAcc     % Task acceleration (mm/s^2)
+        TaskVel     % Task speed (mm/s)
+        BlendRadius % Blend radius between movements (mm)
+        %MoveTime 
+    end
     properties(GetAccess='public', SetAccess='private')
         DHtable     % DH table associated with robot
-    end % end properties
-    
-    properties(GetAccess='public', SetAccess='public')
-        Frame0      % Frame 0 (transformation relative to World/Axes Frame)
-    end % end properties
-    
-    properties(GetAccess='public', SetAccess='private', Hidden=true)
-        Frame1      % Frame 1 (transformation relative to Frame 0)
-        Frame2      % Frame 2 (transformation relative to Frame 1)
-        Frame3      % Frame 3 (transformation relative to Frame 2)
-        Frame4      % Frame 4 (transformation relative to Frame 3)
-        Frame5      % Frame 5 (transformation relative to Frame 4)
-        Frame6      % Frame 6 (transformation relative to Frame 5)
-        FrameE      % End-effector Frame (transformation relative to Frame 6)
     end % end properties
     
     properties(GetAccess='public', SetAccess='public')
@@ -214,6 +210,16 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 obj.IP,obj.Port);
             obj.Client = tcpclient(obj.IP,obj.Port);
             fprintf('SUCCESS\n');
+            
+            % Initialize arm
+            obj.InitializeArm;
+            
+            % Initialize parameters
+            obj.MoveType = 'LinearJoint';
+            obj.JointAcc = 0.394;   % rad/s^2
+            obj.JointVel = 0.524;   % rad/s
+            obj.TaskAcc  = 100.0;   % mm/s^2
+            obj.TaskVel  = 100.0;   % mm/s
         end
     end % end methods
     
@@ -221,6 +227,50 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % General Use
     % --------------------------------------------------------------------
     methods(Access='public')
+        function InitializeArm(obj)
+            fprintf('Initializing arm...');
+            msg = 'btnarm';
+            obj.sendMsg(msg);
+            out = obj.receiveMsg(1,'uint8');
+            switch out
+                case 2  % Arm is ready
+                    fprintf('READY');
+                case 1  % Arm is booting
+                    fprintf('ARM BOOTING...');
+                    out = obj.receiveMsg(1,'uint8');
+                    if out == 2
+                        fprintf('READY');
+                    else
+                        fprintf('UNKNOWN RESPONSE "%d"',out);
+                    end
+                otherwise
+                    fprintf('UNKNOWN RESPONSE "%d"',out);
+            end
+            fprintf('\n');
+        end
+        
+        function tf = isMoving(obj)
+            % Check if UR is currently moving
+            msg = 'getarmdone';
+            obj.sendMsg(msg);
+            out = read(TCp,1,'uint8');
+            if out == 1
+                % Motion is complete
+                tf = false;
+            else
+                % Arm is moving
+                tf = true;
+            end
+        end
+        
+        function WaitForMove(obj)
+            % Wait for arm to move
+            while obj.isMoving
+                fprintf('.');
+            end
+            fprintf('\n');
+        end
+        
         function Home(obj)
             % Move the UR simulation to the home configuration
             % TODO - confirm home position of UR3 and UR5
@@ -343,6 +393,26 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % --------------------------------------------------------------------
     methods
         % GetAccess & SetAccess ------------------------------------------
+        % Move Type
+        function moveType = get.MoveType(obj)
+            moveType = obj.MoveType;
+        end
+        
+        function set.MoveType(obj,moveType)
+            switch lower(moveType)
+                case 'linearjoint'
+                    moveType = 'LinearJoint';
+                case 'lineartask'
+                    moveType = 'LinearTask';
+                case 'joint'
+                    moveType = 'LinearJoint';
+                case 'task'
+                    moveType = 'LinearTask';
+                otherwise
+                    error('Unrecognized MoveType "%s"',moveType);
+            end
+            obj.MoveType = moveType;
+        end
         
         % Joints - 1x6 array containing joint values (radians)
         function joints = get.Joints(obj)
@@ -356,13 +426,30 @@ classdef URQt < matlab.mixin.SetGet % Handle
         function set.Joints(obj,joints)
             % Set the joint configuration of the simulation
             % movej([0,1.57,-1.57,3.14,-1.57,1.57],a=1.4, v=1.05, t=0, r=0)
+            
+            % Check specified joint array
             if numel(joints) ~= 6
                 error('Joint vector must be specified as a 6-element array.');
             end
             
-            msg = sprintf(...
-                'movej([%9.6f,%9.6f,%9.6f,%9.6f,%9.6f,%9.6f])\n',...
-                joints);
+            jmsg = fprintf('[%9.6f,%9.6f,%9.6f,%9.6f,%9.6f,%9.6f]',joints);
+            switch obj.MoveType
+                case 'LinearJoint'
+                    a = obj.JointAcc;           % rad/s^2
+                    v = obj.JointVel;           % rad/s^2
+                    r = obj.BlendRadius/1000;   % m
+                    msg = sprintf('movej(%s,a=%9.6f, v=%9.6f, t=0, r=%9.6f)\n',...
+                        jmsg,a,v,r);
+                case 'LinearTask'
+                    a = obj.TaskAcc/1000;       % m/s^2
+                    v = obj.TaskVel/1000;       % m/s
+                    r = obj.BlendRadius/1000;   % m
+                    msg = sprintf('movel(%s,a=%9.6f, v=%9.6f, t=0, r=%9.6f)\n',...
+                        jmsg,a,v,r);
+                otherwise
+                    error('Unrecognized move type "%s"',obj.MoveType);
+            end
+            
             obj.sendMsg(msg);
             rsp = obj.receiveMsg(1,'uint8');  
         end
@@ -471,10 +558,26 @@ classdef URQt < matlab.mixin.SetGet % Handle
             if numel(joints) ~= 6
                 error('Task vector must be specified as a 6-element array.');
             end
+            
             task(1:3) = task(1:3)./1000; % Convert from mm to m
-            msg = sprintf(...
-                'movej(p[%9.6f,%9.6f,%9.6f,%9.6f,%9.6f,%9.6f])\n',...
-                task);
+            tmsg = fprintf('[%9.6f,%9.6f,%9.6f,%9.6f,%9.6f,%9.6f]',task);
+            switch obj.MoveType
+                case 'LinearJoint'
+                    a = obj.JointAcc;           % rad/s^2
+                    v = obj.JointVel;           % rad/s^2
+                    r = obj.BlendRadius/1000;   % m
+                    msg = sprintf('movej(p%s,a=%9.6f, v=%9.6f, t=0, r=%9.6f)\n',...
+                        tmsg,a,v,r);
+                case 'LinearTask'
+                    a = obj.TaskAcc/1000;       % m/s^2
+                    v = obj.TaskVel/1000;       % m/s
+                    r = obj.BlendRadius/1000;   % m
+                    msg = sprintf('movel(p%s,a=%9.6f, v=%9.6f, t=0, r=%9.6f)\n',...
+                        tmsg,a,v,r);
+                otherwise
+                    error('Unrecognized move type "%s"',obj.MoveType);
+            end
+            
             obj.sendMsg(msg);
             rsp = obj.receiveMsg(1,'uint8');  
         end

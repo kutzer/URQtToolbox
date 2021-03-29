@@ -18,6 +18,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % -Qt Connection
     %   IP          - String containing IP address for Qt connection
     %   Port        - Integer specifying port for Qt connection
+    %   Client      - TCP client object for Qt connection
     %
     % -Universal Robot Model
     %   URmodel     - string argument defining model of Universal Robot
@@ -52,15 +53,6 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %                 units (x,y,z) that are specified in millimeters
     %
     % -Frame Definitions
-    %   Frame0      - Frame 0 (transformation relative to World Frame)
-    %   Frame1      - Frame 1 (transformation relative to Frame 0)
-    %   Frame2      - Frame 2 (transformation relative to Frame 1)
-    %   Frame3      - Frame 3 (transformation relative to Frame 2)
-    %   Frame4      - Frame 4 (transformation relative to Frame 3)
-    %   Frame5      - Frame 5 (transformation relative to Frame 4)
-    %   Frame6      - Frame 6 (transformation relative to Frame 5)
-    %   FrameE      - End-effector Frame (transformation relative to
-    %                 Frame 6)
     %   FrameT      - Tool Frame (transformation relative to the
     %                 End-effector Frame)
     %
@@ -93,6 +85,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     properties(GetAccess='public', SetAccess='private')
         IP          % String containing IP address for Qt connection
         Port        % Integer specifying port for Qt connection
+        Client      % TCP client object for Qt connection      
     end
     
     properties(GetAccess='public', SetAccess='private')
@@ -102,7 +95,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
     properties(GetAccess='public', SetAccess='public')
         Joints      % 1x6 array containing joint values (radians)
         Pose        % 4x4 homogeneous transform representing the end-effector pose relative to the world frame
+        Task        % 1x6 array containing end-effector pose in task space
         ToolPose    % 4x4 homogeneous transform representing the tool pose relative to the world frame
+        ToolTask    % 1x6 array containing tool pose in task space
     end % end properties
     
     properties(GetAccess='public', SetAccess='private')
@@ -208,6 +203,17 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 fprintf('SKIPPED\n');
                 fprintf('\tQt interface is already running.\n');
             end
+            
+            % Initialize IP and Port
+            % TODO - allow user to specify IP and Port
+            obj.IP = '127.0.0.1';
+            obj.Port = 8897;
+            % TODO - specify and use terminator
+            % TODO - specify terminator callback function
+            fprintf('Initializing TCP Client: IP %s, Port %d...',...
+                obj.IP,obj.Port);
+            obj.Client = tcpclient(obj.IP,obj.Port);
+            fprintf('SUCCESS\n');
         end
     end % end methods
     
@@ -218,10 +224,11 @@ classdef URQt < matlab.mixin.SetGet % Handle
         function Home(obj)
             % Move the UR simulation to the home configuration
             % TODO - confirm home position of UR3 and UR5
-            joints = [ 0.00;...
-                -pi/2;...
+            joints = [...
                 0.00;...
-                -pi/2;...
+               -pi/2;...
+                0.00;...
+               -pi/2;...
                 0.00;...
                 0.00];
             obj.Joints = joints;
@@ -230,9 +237,10 @@ classdef URQt < matlab.mixin.SetGet % Handle
         function Stow(obj)
             % Move the UR simulation to the stow configuration
             % TODO - confirm stow position of UR3 and UR5
-            joints = [ 0.00000;...
-                -0.01626;...
-                -2.77643;...
+            joints = [...
+                0.00000;...
+               -0.01626;...
+               -2.77643;...
                 1.22148;...
                 1.57080;...
                 0.00000];
@@ -287,6 +295,47 @@ classdef URQt < matlab.mixin.SetGet % Handle
             str = sprintf('start /min "" "%s" ',fstr);
             system(str);
         end
+        
+        function sendMsg(obj,varargin)
+            % Send message to Qt server
+            % obj.sendMsg(msg)
+            msg = varargin{1};
+            s = uint8(msg);
+            write(obj.Client,s);
+            % Wait for response
+            while isempty(obj.Client.BytesAvailable)
+                % Waiting for response from server
+            end
+        end
+        
+        function msg = receiveMsg(obj,varargin)
+            % Receive message from Qt server
+            % obj.receiveMsg(6,'double')
+            dSize = varargin{1};
+            dType = varargin{2};
+            % TODO - check nargin, and variables
+            msg = read(obj.Client,dSize,dType);
+        end
+        
+        function task = pose2task(obj,pose)
+            % Convert pose to task space
+            H = pose;
+            R = H(1:3,1:3);
+            d = H(1:3,4);
+            r = rotationMatrixToVector(R);
+            task = [reshape(d,1,3),reshape(r,1,3)];
+        end
+        
+        function pose = task2pose(obj,task)
+            % Convert task space to pose
+            d = task(1:3);
+            r = task(4:6);
+            R = rotationVectorToMatrix(r);
+            H = eye(4);
+            H(1:3,1:3) = R;
+            H(1:3,4) = d;
+            pose = H;
+        end
     end
     
     % --------------------------------------------------------------------
@@ -298,21 +347,34 @@ classdef URQt < matlab.mixin.SetGet % Handle
         % Joints - 1x6 array containing joint values (radians)
         function joints = get.Joints(obj)
             % Get current joint configuration of the simulation
-            joints = obj.Joints;
+            msg = 'getarmjoints';
+            obj.sendMsg(msg);
+            joints = obj.receiveMsg(6,'double');
+            joints = reshape(joints,[],1);
         end
         
-        function obj = set.Joints(obj,joints)
+        function set.Joints(obj,joints)
             % Set the joint configuration of the simulation
+            % movej([0,1.57,-1.57,3.14,-1.57,1.57],a=1.4, v=1.05, t=0, r=0)
+            if numel(joints) ~= 6
+                error('Joint vector must be specified as a 6-element array.');
+            end
             
+            msg = sprintf(...
+                'movej([%9.6f,%9.6f,%9.6f,%9.6f,%9.6f,%9.6f])\n',...
+                joints);
+            obj.sendMsg(msg);
+            rsp = obj.receiveMsg(1,'uint8');  
         end
         
         % JointI - individaul joints of the robot
         % Joint 1
         function joint = get.Joint1(obj)
             % Get current angle of joint 1
-            
+            joints = obj.Joints;
+            joint = joints(1);
         end
-        function obj = set.Joint1(obj,joint)
+        function set.Joint1(obj,joint)
             % Set current angle of joint 1
             joints = obj.Joints;
             joints(1) = joint;
@@ -324,7 +386,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             joints = obj.Joints;
             joint = joints(2);
         end
-        function obj = set.Joint2(obj,joint)
+        function set.Joint2(obj,joint)
             % Set current angle of joint 2
             joints = obj.Joints;
             joints(2) = joint;
@@ -336,7 +398,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             joints = obj.Joints;
             joint = joints(3);
         end
-        function obj = set.Joint3(obj,joint)
+        function set.Joint3(obj,joint)
             % Set current angle of joint 3
             joints = obj.Joints;
             joints(3) = joint;
@@ -348,7 +410,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             joints = obj.Joints;
             joint = joints(4);
         end
-        function obj = set.Joint4(obj,joint)
+        function set.Joint4(obj,joint)
             % Set current angle of joint 4
             joints = obj.Joints;
             joints(4) = joint;
@@ -360,7 +422,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             joints = obj.Joints;
             joint = joints(5);
         end
-        function obj = set.Joint5(obj,joint)
+        function set.Joint5(obj,joint)
             % Set current angle of joint 5
             joints = obj.Joints;
             joints(5) = joint;
@@ -372,7 +434,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             joints = obj.Joints;
             joint = joints(6);
         end
-        function obj = set.Joint6(obj,joint)
+        function set.Joint6(obj,joint)
             % Set current angle of joint 6
             joints = obj.Joints;
             joints(6) = joint;
@@ -383,64 +445,38 @@ classdef URQt < matlab.mixin.SetGet % Handle
         %        pose relative to the world frame
         function pose = get.Pose(obj)
             % Get the current end-effector pose of the simulation
-            pose0 = UR_fkin(obj.URmodel,obj.Joints);
-            pose = obj.Frame0 * pose0;   % Account for world frame offset
+            task = obj.Task;
+            pose = obj.task2pose(task);
         end
         
-        function obj = set.Pose(obj,pose)
+        function set.Pose(obj,pose)
             % Set the current end-effector pose of the simulation
-            pose0 = invSE(obj.Frame0) * pose;   % Account for world frame offset
-            q_all = UR_ikin(obj.URmodel,pose0); % Solve inverse kinematics
-            if size(q_all,2) > 0
-                % Account for multiple solutions
-                % Find solution closest to current configuration
-                q = obj.Joints;                 % Get current joint configuration
-                [q_star,q_sort] = findClosestVector(q_all,q);
-                
-                %{
-                % TODO - notify user is multiple options are close
-                % Prompt user to select from multiple options
-                if max( abs(q-q_star) ) < deg2rad(2)
-                    q_idx = 1;
-                    q_max = size(q_sort,2);
-                    while true
-                        % TODO - Make internal dialog to take care of this.
-                        choice = questdlg('Select viable solution', ...
-                            'Large Movement Solution', ...
-                            'Previous','Select','Next','Select');
-                        switch choice
-                            case 'Previous'
-                                q_idx = mod(q_idx - 1, q_max);
-                                if q_idx == 0
-                                    q_idx = q_max;
-                                end
-                                obj.Joints = q_sort(:,q_idx);
-                                drawnow
-                            case 'Next'
-                                q_idx = mod(q_idx + 1, q_max);
-                                if q_idx == 0
-                                    q_idx = q_max;
-                                end
-                                obj.Joints = q_sort(:,q_idx);
-                                drawnow
-                            case 'Select'
-                                q_star = q_sort(:,q_idx);
-                                break
-                            otherwise
-                                disp(choice);
-                                error('Unexpected response.');
-                        end
-                        
-                    end
-                    
-                end
-                %}
-                
-                obj.Joints = q_star;            % Set new joint configuration
-                obj.Pose = pose;                % Update pose
-            else
-                warning('Specified pose is outside of the workspace.');
+            task = pose2task(pose);
+            obj.Task = task;
+        end
+        
+        % Task - 1x6 array of [x,y,z,r1,r2,r3] matching the task variables 
+        %        used by UR with the exception of linear units (x,y,z) that
+        %        are specified in millimeters 
+        function task = get.Task(obj)
+            msg = 'getarmpose';
+            obj.sendMsg(msg);
+            task = obj.receiveMsg(6,'double');
+            task(1:3) = task(1:3)*1000; % Convert from m to mm
+            task = reshape(task,[],1);
+        end
+        
+        function set.Task(obj,task)
+            % movej([0,1.57,-1.57,3.14,-1.57,1.57],a=1.4, v=1.05, t=0, r=0)
+            if numel(joints) ~= 6
+                error('Task vector must be specified as a 6-element array.');
             end
+            task(1:3) = task(1:3)./1000; % Convert from mm to m
+            msg = sprintf(...
+                'movej(p[%9.6f,%9.6f,%9.6f,%9.6f,%9.6f,%9.6f])\n',...
+                task);
+            obj.sendMsg(msg);
+            rsp = obj.receiveMsg(1,'uint8');  
         end
         
         % ToolPose - 4x4 homogeneous transform representing the tool pose
@@ -451,23 +487,10 @@ classdef URQt < matlab.mixin.SetGet % Handle
             toolpose = pose * obj.FrameT;
         end
         
-        function obj = set.ToolPose(obj,toolpose)
+        function set.ToolPose(obj,toolpose)
             % Set the current tool pose of the simulation
             pose = toolpose * invSE(obj.FrameT);
             obj.Pose = pose;
-        end
-        
-        % Frame 0 - 4x4 homogeneous transform relative to World/Axes Frame)
-        function frame0 = get.Frame0(obj)
-            % Get the transformation relating the base frame to the world
-            frame0 = obj.Frame0;
-        end
-        
-        function obj = set.Frame0(obj,frame0)
-            % Set the transformation relating the base frame to the world
-            obj.Frame0 = frame0;
-            h = obj.hFrame0;
-            set(h,'Matrix',frame0);
         end
         
         % FrameT - Tool Frame (transformation relative to the End-effector
@@ -478,12 +501,10 @@ classdef URQt < matlab.mixin.SetGet % Handle
             frameT = obj.FrameT;
         end
         
-        function obj = set.FrameT(obj,frameT)
+        function set.FrameT(obj,frameT)
             % Set the transformation relating the tool frame to the
             % end-effector frame
             obj.FrameT = frameT;
-            h = obj.hFrameT;
-            set(h,'Matrix',frameT);
         end
         
         function obj = set.Joints_Old(obj,allJoints)
@@ -508,34 +529,6 @@ classdef URQt < matlab.mixin.SetGet % Handle
             urMod = obj.URmodel;
             dhtable = UR_DHtable(urMod,q);
         end
-        % Frame1 - 4x4 transformation relative to Frame 0
-        function frame1 = get.Frame1(obj)
-            frame1 = obj.Frame1;
-        end
-        % Frame2 - 4x4 transformation relative to Frame 1
-        function frame2 = get.Frame2(obj)
-            frame2 = obj.Frame2;
-        end
-        % Frame3 - 4x4 transformation relative to Frame 2
-        function frame3 = get.Frame3(obj)
-            frame3 = obj.Frame3;
-        end
-        % Frame4 - 4x4 transformation relative to Frame 3
-        function frame4 = get.Frame4(obj)
-            frame4 = obj.Frame4;
-        end
-        % Frame5 - 4x4 transformation relative to Frame 4
-        function frame5 = get.Frame5(obj)
-            frame5 = obj.Frame5;
-        end
-        % Frame6 - 4x4 transformation relative to Frame 5
-        function frame6 = get.Frame6(obj)
-            frame6 = obj.Frame6;
-        end
-        % FrameE - 4x4 transformation relative to Frame 6
-        function frameE = get.FrameE(obj)
-            frameE = obj.FrameE;
-        end
-        
+ 
     end % end methods
 end % end classdef

@@ -42,15 +42,15 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %                 pose relative to the world frame (linear units are
     %                 defined in millimeters)
     %   Task        - 1x6 array of [x,y,z,r1,r2,r3] matching the task
-    %                 variables used by UR with the exception of linear 
-    %                 units (x,y,z) that are specified in millimeters 
+    %                 variables used by UR with the exception of linear
+    %                 units (x,y,z) that are specified in millimeters
     %
     % -Tool pose
     %   ToolPose    - 4x4 rigid body transform defining the tool pose
     %                 relative to the world frame (linear units are defined
     %                 in millimeters)
     %   ToolTask    - 1x6 array of [x,y,z,r1,r2,r3] matching the task
-    %                 variables used by UR with the exception of linear 
+    %                 variables used by UR with the exception of linear
     %                 units (x,y,z) that are specified in millimeters
     %
     % -Frame Definitions
@@ -78,7 +78,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   M. Kutzer 26Mar2021, USNA
     
     % Updates
-
+    
     
     % --------------------------------------------------------------------
     % General properties
@@ -86,7 +86,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     properties(GetAccess='public', SetAccess='private')
         IP          % String containing IP address for Qt connection
         Port        % Integer specifying port for Qt connection
-        Client      % TCP client object for Qt connection      
+        Client      % TCP client object for Qt connection
     end
     
     properties(GetAccess='public', SetAccess='private')
@@ -108,7 +108,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
         TaskAcc     % Task acceleration (mm/s^2)
         TaskVel     % Task speed (mm/s)
         BlendRadius % Blend radius between movements (mm)
-        %MoveTime 
+        %MoveTime
     end
     properties(GetAccess='public', SetAccess='private')
         DHtable     % DH table associated with robot
@@ -222,7 +222,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             
             % Initialize arm
             obj.InitializeArm;
-
+            
         end
     end % end methods
     
@@ -280,9 +280,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % TODO - confirm home position of UR3 and UR5
             joints = [...
                 0.00;...
-               -pi/2;...
+                -pi/2;...
                 0.00;...
-               -pi/2;...
+                -pi/2;...
                 0.00;...
                 0.00];
             obj.Joints = joints;
@@ -292,12 +292,12 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Move the UR simulation to the stow configuration
             % TODO - confirm stow position of UR3 and UR5
             joints = [...
-                0.00000;...
-               -0.01626;...
-               -2.77643;...
-                1.22148;...
-                1.57080;...
-                0.00000];
+               -1.570782,...
+               -3.141604,...
+                2.652899,...
+               -4.223715,...
+                0.000023,...
+                4.712387];
             obj.Joints = joints;
         end
         
@@ -326,7 +326,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Check if server is running
             str = sprintf('tasklist /fi "imagename eq %s"',obj.QtEXE);
             [~,cmdout] = system(str);
-            % If the server is *not* running, we expect response resembling 
+            % If the server is *not* running, we expect response resembling
             % the following:
             %   "INFO: No tasks are running which match the specified
             %   criteria."
@@ -462,7 +462,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             end
             
             obj.sendMsg(msg);
-            rsp = obj.receiveMsg(1,'uint8');  
+            rsp = obj.receiveMsg(1,'uint8');
         end
         
         % JointI - individaul joints of the robot
@@ -549,13 +549,13 @@ classdef URQt < matlab.mixin.SetGet % Handle
         
         function set.Pose(obj,pose)
             % Set the current end-effector pose of the simulation
-            task = pose2task(pose);
+            task = obj.pose2task(pose);
             obj.Task = task;
         end
         
-        % Task - 1x6 array of [x,y,z,r1,r2,r3] matching the task variables 
+        % Task - 1x6 array of [x,y,z,r1,r2,r3] matching the task variables
         %        used by UR with the exception of linear units (x,y,z) that
-        %        are specified in millimeters 
+        %        are specified in millimeters
         function task = get.Task(obj)
             msg = 'getarmpose';
             obj.sendMsg(msg);
@@ -590,7 +590,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             end
             
             obj.sendMsg(msg);
-            rsp = obj.receiveMsg(1,'uint8');  
+            rsp = obj.receiveMsg(1,'uint8');
         end
         
         % ToolPose - 4x4 homogeneous transform representing the tool pose
@@ -621,7 +621,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.FrameT = frameT;
         end
         
-        function obj = set.Joints_Old(obj,allJoints)
+        function set.Joints_Old(obj,allJoints)
             % Set the history for undo method
             n = 50; % Limit size of history
             % alljoints(:,end+1) = joints;
@@ -643,6 +643,6 @@ classdef URQt < matlab.mixin.SetGet % Handle
             urMod = obj.URmodel;
             dhtable = UR_DHtable(urMod,q);
         end
- 
+        
     end % end methods
 end % end classdef

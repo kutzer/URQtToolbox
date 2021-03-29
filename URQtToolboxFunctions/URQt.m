@@ -89,6 +89,11 @@ classdef URQt < matlab.mixin.SetGet % Handle
         Client      % TCP client object for Qt connection
     end
     
+    properties(GetAccess='public', SetAccess='public')
+        Timeout     % Allowed time for TCP client to complete operations (s) 
+        ConnectTimeout   % Allowed time to connect to remove host (s)
+    end
+    
     properties(GetAccess='public', SetAccess='private')
         URmodel     % Specified type of Universal Robot Manipulator
     end
@@ -99,6 +104,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
         Task        % 1x6 array containing end-effector pose in task space
         ToolPose    % 4x4 homogeneous transform representing the tool pose relative to the world frame
         ToolTask    % 1x6 array containing tool pose in task space
+        GripPosition    % scalar value for gripper position (mm)
+        GripSpeed       % scalar value for gripper speed (mm/s)
+        GripForce       % scalar value for gripper force (TBD)
     end % end properties
     
     properties(GetAccess='public', SetAccess='public')
@@ -204,6 +212,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % TODO - allow user to specify IP and Port
             obj.IP = '127.0.0.1';
             obj.Port = 8897;
+            obj.Timeout = 5;
+            obj.ConnectTimeout = 10;
             
             % Initialize parameters
             obj.MoveType = 'LinearJoint';
@@ -217,7 +227,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % TODO - specify terminator callback function
             fprintf('Initializing TCP Client: IP %s, Port %d...',...
                 obj.IP,obj.Port);
-            obj.Client = tcpclient(obj.IP,obj.Port);
+            obj.Client = tcpclient(obj.IP,obj.Port,...
+                'Timeout',obj.Timeout,...
+                'ConnectTimeout',obj.ConnectTimeout);
             fprintf('SUCCESS\n');
             
             % Initialize arm
@@ -257,7 +269,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Check if UR is currently moving
             msg = 'getarmdone';
             obj.sendMsg(msg);
-            out = receiveMsg(1,'uint8');
+            out = obj.receiveMsg(1,'uint8');
             if out == 1
                 % Motion is complete
                 tf = false;
@@ -375,7 +387,12 @@ classdef URQt < matlab.mixin.SetGet % Handle
             dSize = varargin{1};
             dType = varargin{2};
             % TODO - check nargin, and variables
-            msg = read(obj.Client,dSize,dType);
+            try
+                msg = read(obj.Client,dSize,dType);
+            catch
+                warning('Timeout reached, no message received.');
+                msg = nan;
+            end
         end
         
         function task = pose2task(obj,pose)
@@ -404,6 +421,28 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % --------------------------------------------------------------------
     methods
         % GetAccess & SetAccess ------------------------------------------
+        % Timeout
+        function set.Timeout(obj,timeout)
+            switch lower( class(obj.Client) )
+                case 'tcpclient'
+                    obj.Client.Timeout = timeout;
+                    obj.Timeout = timeout;
+                otherwise
+                    obj.Timeout = timeout;
+            end
+        end
+        
+        % Timeout
+        function set.ConnectTimeout(obj,timeout)
+            switch lower( class(obj.Client) )
+                case 'tcpclient'
+                    obj.Client.ConnectTimeout = timeout;
+                    obj.ConnectTimeout = timeout;
+                otherwise
+                    obj.ConnectTimeout = timeout;
+            end
+        end
+        
         % Move Type
         function moveType = get.MoveType(obj)
             moveType = obj.MoveType;
@@ -592,7 +631,44 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.sendMsg(msg);
             rsp = obj.receiveMsg(1,'uint8');
         end
+        % Grip Position
+        function gPos = get.GripPosition(obj)
+            msg = 'get pos\n';
+            obj.sendMsg(msg);
+            gPos_uint8 = obj.receiveMsg(1,'double');
+            gPos = gPos_uint8 * (52/255);
+        end
         
+        function set.GripPosition(obj,gPos)
+            if gPos < 0
+                warning('Gripper position must be between 0 and 52 mm');
+                gPos = 0;
+            end
+            if gPos > 52
+                warning('Gripper position must be between 0 and 52 mm');
+                gPos = 52;
+            end
+            gPos_uint8 = uint8( gPos*(255/52) );
+            msg = sprintf('set pos %d\n',gPos_uint8);
+            obj.sendMsg(msg);
+        end
+        
+        % Grip Speed
+        function gSpeed = get.GripSpeed(obj)
+            msg = 'get spe\n';
+            obj.sendMsg(msg);
+            gSpeed = obj.receiveMsg(1,'double');
+        end
+        
+        function set.GripSpeed(obj,gSpeed)
+            % TODO - figure out what the actual unit conversion is and
+            % limits are!
+            % -> 0 - 255
+            msg = sprintf('set spe %d\n',uint8(gSpeed));
+            obj.sendMsg(msg);
+        end
+        
+        % Grip Force
         % ToolPose - 4x4 homogeneous transform representing the tool pose
         %            relative to the world frame
         function toolpose = get.ToolPose(obj)
@@ -630,6 +706,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             end
             obj.Joints_Old = allJoints;
         end
+        
         
         % GetAccess ------------------------------------------------------
         

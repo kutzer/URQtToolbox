@@ -655,6 +655,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
         
         % Grip Speed
         function gSpeed = get.GripSpeed(obj)
+            % TODO - figure out units and conversion for grip speed
             msg = 'get spe\n';
             obj.sendMsg(msg);
             gSpeed = obj.receiveMsg(1,'double');
@@ -669,6 +670,19 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
         
         % Grip Force
+        function gForce = get.GripForce(obj)
+            % TODO - figure out units and conversion for grip force
+            msg = sprintf('get for\n');
+            obj.sendMsg(msg);
+            gSpeed = obj.receiveMsg(1,'double');
+        end
+        
+        function set.GripForce(obj,gForce)
+            % TODO - figure out units and conversion for grip force
+            msg = sprintf('set for %d\n',uint8(gForce));
+            obj.sendMsg(msg);
+        end
+        
         % ToolPose - 4x4 homogeneous transform representing the tool pose
         %            relative to the world frame
         function toolpose = get.ToolPose(obj)

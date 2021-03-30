@@ -42,7 +42,6 @@ end
 %% Download and unzip toolbox (GitHub)
 %url = sprintf('https://github.com/kutzer/%sToolbox/archive/master.zip',toolboxName); <--- Github removed references to "master"
 url = sprintf('https://github.com/kutzer/%sToolbox/archive/refs/heads/main.zip',toolboxName);
-
 try
     %fnames = unzip(url,pname);
     %urlwrite(url,fullfile(pname,tmpFname));
@@ -58,6 +57,40 @@ catch ME
     confirm = false;
     fprintf(2,'ERROR MESSAGE:\n\t%s\n',ME.message);
 end
+
+%{
+%% WORK IN PROGRESS! 
+% --> Download without certificate using default webbrowser
+if ~confirm
+%try
+    % Find user downloads folder
+    dlDir = fullfile(getenv('USERPROFILE'), 'Downloads');
+    % Download zip using temp webbrowser
+    web(url);
+    
+    tmpFname = sprintf('%sToolbox-main.zip',toolboxName);
+    t0 = tic;
+    tf = 120;
+    while ~isfile(fullfile(dlDir,tmpFname))
+        t = toc(t0);
+        fprintf('.');
+        if t > tf
+            error('Unable to download/find file.');
+        end
+    end
+    movefile(fullfile(dlDir,tmpFname),pname);
+    fnames = unzip(fullfile(pname,tmpFname),pname);
+    delete(fullfile(pname,tmpFname));
+    
+    fprintf('SUCCESS\n');
+    confirm = true;
+%catch ME
+%    fprintf('FUDGE\n')
+%    confirm = false;
+%    fprintf(2,'ERROR MESSAGE:\n\t%s\n',ME.message);
+%end
+end
+%}
 
 %% Check for successful download
 alternativeInstallMsg = [...

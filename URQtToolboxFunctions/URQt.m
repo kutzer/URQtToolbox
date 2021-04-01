@@ -401,14 +401,14 @@ classdef URQt < matlab.mixin.SetGet % Handle
             R = H(1:3,1:3);
             d = H(1:3,4);
             r = rotationMatrixToVector(R);
-            task = [reshape(d,1,3),reshape(r,1,3)];
+            task = [reshape(d,1,3),reshape(-r,1,3)];
         end
         
         function pose = task2pose(obj,task)
             % Convert task space to pose
             d = task(1:3);
             r = task(4:6);
-            R = rotationVectorToMatrix(r);
+            R = rotationVectorToMatrix(-r);
             H = eye(4);
             H(1:3,1:3) = R;
             H(1:3,4) = d;

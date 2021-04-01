@@ -217,6 +217,26 @@ classdef URQt < matlab.mixin.SetGet % Handle
         function delete(obj)
             % Object destructor
             
+            % Shutdown arm
+            obj.ShutdownArm;
+            
+            % Close the TCP/IP connection
+            fprintf('Closing TCP Client: IP %s, Port %d...',...
+                obj.IP,obj.Port);
+            client = obj.Client;
+            clear client
+            obj.Client = [];
+            fprintf('SUCCESS\n');
+            
+            % Close the Qt interface
+            fprintf('Closing Qt interface...');
+            tf = obj.stopQt;
+            if tf
+                fprintf('SUCCESS\n');
+            else
+                fprintf('FAILED\n');
+            end
+            
         end
     end % end methods
     
@@ -279,7 +299,19 @@ classdef URQt < matlab.mixin.SetGet % Handle
                     fprintf('READY');
                 case 1  % Arm is booting
                     fprintf('ARM BOOTING...');
-                    pause(30);
+                    
+                    % Wait for arm to boot
+                    t0 = tic;
+                    tf = 30;
+                    g = gifwait(0,'Initializing arm');
+                    while true
+                        g = gifwait(g);
+                        t = toc(t0);
+                        if t >= tf
+                            break
+                        end
+                    end
+                    
                     out = obj.receiveMsg(1,'uint8');
                     if out == 2
                         fprintf('READY');
@@ -290,6 +322,17 @@ classdef URQt < matlab.mixin.SetGet % Handle
                     fprintf('UNKNOWN RESPONSE "%d"',out);
             end
             fprintf('\n');
+        end
+        
+        function ShutdownArm(obj)
+            %{
+            fprintf('Shutting down arm...');
+            msg = 'shutdown';
+            %msg = 'power off';
+            obj.sendMsg(msg);
+            fprintf('COMMAND SENT\n');
+            %}
+            fprintf('ShutdownArm: This method is not fully implemented.');
         end
         
         function tf = isMoving(obj)
@@ -389,6 +432,13 @@ classdef URQt < matlab.mixin.SetGet % Handle
             system(str);
         end
         
+        function tf = stopQt(obj)
+            % Stop the server
+            str = sprintf('taskkill /im "%s"',obj.QtEXE);
+            [~,cmdout] = system(str);
+            tf = contains(cmdout,'SUCCESS');
+        end
+        
         function sendMsg(obj,varargin)
             % Send message to Qt server
             % obj.sendMsg(msg)
@@ -417,7 +467,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             try
                 msg = read(obj.Client,dSize,dType);
             catch
-                warning('Timeout reached, no message received.');
+                %warning('Timeout reached, no message received.');
                 msg = nan;
             end
         end

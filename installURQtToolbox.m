@@ -270,7 +270,7 @@ for i = 1:numel(supportToolboxes)
 end
 
 for i = 1:numel(supportRepos)
-    SupportUpate( supportRepos{i} );
+    SupportUpdate( supportRepos{i} );
 end
 
 end

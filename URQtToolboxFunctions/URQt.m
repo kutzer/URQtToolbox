@@ -105,7 +105,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
         ToolPose    % 4x4 homogeneous transform representing the tool pose relative to the world frame
         ToolTask    % 1x6 array containing tool pose in task space
         GripPosition    % scalar value for gripper position (mm)
-        GripSpeed       % scalar value for gripper speed (mm/s)
+        GripSpeed       % scalar value for gripper speed (TBD/s)
         GripForce       % scalar value for gripper force (TBD)
     end % end properties
     
@@ -119,6 +119,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
         %MoveTime
     end
     properties(GetAccess='public', SetAccess='private')
+        Jacobian    % Jacobian associated with robot
         DHtable     % DH table associated with robot
     end % end properties
     
@@ -148,7 +149,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % Constructor/Destructor
     % --------------------------------------------------------------------
     methods(Access='public')
-        function obj = URQt
+        function obj = URQt(varargin)
             % Create URQt Object
             
             % Define Qt executable path
@@ -185,6 +186,32 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 fprintf('SKIPPED\n');
                 fprintf('\tQt interface is already running.\n');
             end
+            
+            % Select robot
+            % -> Define supported robot models
+            URmods = {'UR3','UR3e','UR5','UR5e','UR10','UR10e'};
+            if nargin < 1
+                [s,v] = listdlg(...
+                    'Name','Select Model',...
+                    'PromptString','Select UR model:',...
+                    'SelectionMode','single',...
+                    'ListString',URmods);
+                if v
+                    % User selected model
+                    obj.URmodel = URmods{s};
+                else
+                    % No value selected.
+                    obj.URmodel = [];
+                end
+            else
+                bin = strcmpi( URmods, varargin{1} );
+                if nnz(bin) == 1
+                    obj.URmodel = URmods{bin};
+                else
+                    obj.URmodel = [];
+                end
+            end
+            
         end
         
         function delete(obj)
@@ -728,12 +755,20 @@ classdef URQt < matlab.mixin.SetGet % Handle
         function urmodel = get.URmodel(obj)
             urmodel = obj.URmodel;
         end
+        
         % DHtable - DH table associated with robot
+        % TODO - allow user to calibrate robot to correct DH table
         function dhtable = get.DHtable(obj)
             q = obj.Joints;
             urMod = obj.URmodel;
             dhtable = UR_DHtable(urMod,q);
         end
         
+        % Jacobian - Jacobian associated with robot
+        function J = get.Jacobian(obj)
+            q = obj.Joints;
+            urMod = obj.URmodel;
+            J = UR_Jacobian(urMod,q);
+        end
     end % end methods
 end % end classdef

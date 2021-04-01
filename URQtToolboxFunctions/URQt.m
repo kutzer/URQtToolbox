@@ -90,7 +90,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     end
     
     properties(GetAccess='public', SetAccess='public')
-        Timeout     % Allowed time for TCP client to complete operations (s) 
+        Timeout     % Allowed time for TCP client to complete operations (s)
         ConnectTimeout   % Allowed time to connect to remove host (s)
     end
     
@@ -255,6 +255,16 @@ classdef URQt < matlab.mixin.SetGet % Handle
             %
             % Initialize(obj,URmodel,IP,Port)
             
+            % Clear old TCP client(s)
+            try
+                % Clear old TCP client(s)
+                client = obj.Client;
+                clear client;
+                obj.Client = [];
+            catch
+                % No TCP client exists
+            end
+            
             % Initialize IP and Port
             % TODO - allow user to specify IP and Port
             obj.IP = '127.0.0.1';
@@ -274,6 +284,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % TODO - specify terminator callback function
             fprintf('Initializing TCP Client: IP %s, Port %d...',...
                 obj.IP,obj.Port);
+
             obj.Client = tcpclient(obj.IP,obj.Port,...
                 'Timeout',obj.Timeout,...
                 'ConnectTimeout',obj.ConnectTimeout);
@@ -312,7 +323,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                             break
                         end
                     end
-                    delete(g);
+                    delete(g.fig);
                     
                     out = obj.receiveMsg(1,'uint8');
                     if out == 2
@@ -376,10 +387,10 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Move the UR simulation to the stow configuration
             % TODO - confirm stow position of UR3 and UR5
             joints = [...
-               -1.570782,...
-               -3.141604,...
+                -1.570782,...
+                -3.141604,...
                 2.652899,...
-               -4.223715,...
+                -4.223715,...
                 0.000023,...
                 4.712387];
             obj.Joints = joints;

@@ -304,13 +304,15 @@ classdef URQt < matlab.mixin.SetGet % Handle
                     t0 = tic;
                     tf = 30;
                     g = gifwait(0,'Initializing arm');
-                    while true
+                    while obj.Client.BytesAvailable == 0
                         g = gifwait(g);
                         t = toc(t0);
                         if t >= tf
+                            fprintf('This took longer than expected...');
                             break
                         end
                     end
+                    delete(g);
                     
                     out = obj.receiveMsg(1,'uint8');
                     if out == 2
@@ -332,7 +334,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.sendMsg(msg);
             fprintf('COMMAND SENT\n');
             %}
-            fprintf('ShutdownArm: This method is not fully implemented.');
+            fprintf('ShutdownArm: This method is not fully implemented.\n');
         end
         
         function tf = isMoving(obj)

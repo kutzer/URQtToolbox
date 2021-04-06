@@ -57,6 +57,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   FrameT      - Tool Frame (transformation relative to the
     %                 End-effector Frame)
     %
+    % -
+    %
     % Example:
     %
     %       % Create, initialize, and visualize
@@ -256,12 +258,14 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Initialize(obj,URmodel,IP,Port)
             
             % Clear old TCP client(s)
-            try
+            if ~isempty( obj.Client )
                 % Clear old TCP client(s)
+                fprintf('Resetting TCP client...');
                 client = obj.Client;
-                clear client;
                 obj.Client = [];
-            catch
+                clear client;
+                fprintf('SUCCESS\n');
+            else
                 % No TCP client exists
             end
             

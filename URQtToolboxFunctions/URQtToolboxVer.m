@@ -17,11 +17,12 @@ function varargout = URQtToolboxVer
 %   26Mar2021 - Removed "master" reference from update, check for master
 %               branch for support toolboxes in intall. 
 %   01Apr2021 - Updated class to include model, Jacobian, and DH table
+%   12Apr2021 - Documentation updates
 
 A.Name = 'Universal Robot Qt Toolbox';
-A.Version = '1.0.1';
+A.Version = '1.0.2';
 A.Release = '(R2021a)';
-A.Date = '01-Apr-2021';
+A.Date = '12-Apr-2021';
 A.URLVer = 1;
 
 msg{1} = sprintf('MATLAB %s Version: %s %s',A.Name, A.Version, A.Release);

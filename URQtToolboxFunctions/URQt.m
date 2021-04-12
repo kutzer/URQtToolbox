@@ -10,7 +10,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   Home        - Move URQt to home joint configuration.
     %   Stow        - Move URQt to stow joint configuration.
     %   Zero        - Move URQt to zero joint configuration.
-    %   Undo        - Return URQt to previous joint configuration.
+    %   *Undo        - Return URQt to previous joint configuration.
     %   get         - Query properties of the URQt object.
     %   set         - Update properties of the URQt object.
     %   delete      - Delete the URQt object and all attributes.
@@ -46,33 +46,42 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %                 units (x,y,z) that are specified in millimeters
     %
     % -Tool pose
-    %   ToolPose    - 4x4 rigid body transform defining the tool pose
+    %   *ToolPose    - 4x4 rigid body transform defining the tool pose
     %                 relative to the world frame (linear units are defined
     %                 in millimeters)
-    %   ToolTask    - 1x6 array of [x,y,z,r1,r2,r3] matching the task
+    %   *ToolTask    - 1x6 array of [x,y,z,r1,r2,r3] matching the task
     %                 variables used by UR with the exception of linear
     %                 units (x,y,z) that are specified in millimeters
     %
+    % -Movement Parameters
+    %   MoveType    % String describing move type (LinearTask or LinearJoint)
+    %   JointAcc    % Joint acceleration of leading axis (rad/s^2)
+    %   JointVel    % Joint speed of leading axis (rad/s)
+    %   TaskAcc     % Task acceleration (mm/s^2)
+    %   TaskVel     % Task speed (mm/s)
+    %   BlendRadius % Blend radius between movements (mm)
+    %   *MoveTime   % Movement time (s)
+    %
     % -Frame Definitions
-    %   FrameT      - Tool Frame (transformation relative to the
+    %   *FrameT      - Tool Frame (transformation relative to the
     %                 End-effector Frame)
     %
     % -
     %
     % Example:
     %
-    %       % Create, initialize, and visualize
+    %       % Create and initialize hardware
     %       ur3e = URQt;              % Create URQt object
     %       ur3e.Initialize('UR3e');  % Designate as UR3e
     %
     %       % Send hardware to stow configuration
     %       ur3e.Stow;
     %       ur3e.WaitForMove;
-    %       % Send simulation to home configuration
+    %       % Send hardware to home configuration
     %       ur3e.Home;
     %       ur3e.WaitForMove;
-    %       % Send simulation to specified joint configuration
-    %       ur3e.Joints = 2*pi*rand(1,6);
+    %       % Send hardware to specified joint configuration
+    %       ur3e.Joints = 2*pi*rand(1,6); % <--- BE CAREFUL!!!
     %       ur3e.WaitForMove;
     %
     % See also
@@ -118,7 +127,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
         TaskAcc     % Task acceleration (mm/s^2)
         TaskVel     % Task speed (mm/s)
         BlendRadius % Blend radius between movements (mm)
-        %MoveTime
+        %MoveTime   % Movement time (s)
     end
     properties(GetAccess='public', SetAccess='private')
         Jacobian    % Jacobian associated with robot

@@ -4,16 +4,18 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   obj = URQt creates a hardware connection object for a specific UR
     %
     % URQt Methods
-    %   Initialize  - Initialize the URQt object.
-    %   isMoving    - Determine whether the UR is currently moving
-    %   WaitForMove - Wait until UR completes specified movement.
-    %   Home        - Move URQt to home joint configuration.
-    %   Stow        - Move URQt to stow joint configuration.
-    %   Zero        - Move URQt to zero joint configuration.
+    %   Initialize   - Initialize the URQt object.
+    %   isMoving     - Determine whether the UR is currently moving.
+    %   isGripMoving - Determine whether Robotiq gripper is moving.
+    %   WaitForMove  - Wait until UR completes specified movement.
+    %   WaitForGrip  - Wait until Robotiq gripper finishes movement.
+    %   Home         - Move URQt to home joint configuration.
+    %   Stow         - Move URQt to stow joint configuration.
+    %   Zero         - Move URQt to zero joint configuration.
     %   *Undo        - Return URQt to previous joint configuration.
-    %   get         - Query properties of the URQt object.
-    %   set         - Update properties of the URQt object.
-    %   delete      - Delete the URQt object and all attributes.
+    %   get          - Query properties of the URQt object.
+    %   set          - Update properties of the URQt object.
+    %   delete       - Delete the URQt object and all attributes.
     %
     % URQt Properties
     % -Qt Connection
@@ -375,9 +377,32 @@ classdef URQt < matlab.mixin.SetGet % Handle
             end
         end
         
+        function tf = isGripMoving(obj)
+            % Check if Robotiq is currently moving
+            % TODO - This depends on a hard-coded pause that is clunky
+            g0 = obj.GripPosition;
+            pause(0.1);
+            g1 = obj.GripPosition;
+            if g0 == g1
+                tf = false;
+            else
+                tf = true;
+            end
+        end
+        
         function WaitForMove(obj)
             % Wait for arm to move
+            fprintf('Waiting for UR move');
             while obj.isMoving
+                fprintf('.');
+            end
+            fprintf('\n');
+        end
+        
+        function WaitForGrip(obj)
+            % Wait for gripper to move
+            fprintf('Waiting for Robotiq move');
+            while obj.isGripMoving
                 fprintf('.');
             end
             fprintf('\n');

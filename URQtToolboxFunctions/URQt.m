@@ -91,7 +91,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   M. Kutzer 26Mar2021, USNA
     
     % Updates
-    
+    %   26Aug2021 - Corrected get GripForce, converted GripForce and 
+    %               GripSpeed to percentages
     
     % --------------------------------------------------------------------
     % General properties
@@ -787,12 +788,25 @@ classdef URQt < matlab.mixin.SetGet % Handle
             msg = 'get spe\n';
             obj.sendMsg(msg);
             gSpeed = obj.receiveMsg(1,'double');
+            
+            gSpeed = (gSpeed./255)*100; % Convert to percent
         end
         
         function set.GripSpeed(obj,gSpeed)
             % TODO - figure out what the actual unit conversion is and
             % limits are!
             % -> 0 - 255
+            gSpeed = gSpeed/100; % convert to decimal
+            if gSpeed > 1
+                warning('Gripper speed cannot exceed 100%');
+                gSpeed = 1;
+            end
+            if gSpeed < 0
+                warning('Gripper speed cannot be below 0%');
+                gSpeed = 0;
+            end
+            gSpeed = gSpeed*255;
+            
             msg = sprintf('set spe %d\n',uint8(gSpeed));
             obj.sendMsg(msg);
         end
@@ -802,11 +816,24 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % TODO - figure out units and conversion for grip force
             msg = sprintf('get for\n');
             obj.sendMsg(msg);
-            gSpeed = obj.receiveMsg(1,'double');
+            gForce = obj.receiveMsg(1,'double');
+            
+            gForce = (gForce./255)*100; % Convert to percent
         end
         
         function set.GripForce(obj,gForce)
             % TODO - figure out units and conversion for grip force
+            gForce = gForce/100; % convert to decimal
+            if gForce > 1
+                warning('Gripper force cannot exceed 100%');
+                gForce = 1;
+            end
+            if gForce < 0
+                warning('Gripper force cannot be below 0%');
+                gForce = 0;
+            end
+            gForce = gForce*255;
+            
             msg = sprintf('set for %d\n',uint8(gForce));
             obj.sendMsg(msg);
         end

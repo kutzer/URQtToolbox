@@ -3,6 +3,20 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %
     %   obj = URQt creates a hardware connection object for a specific UR
     %
+    % Methods/Properties Note:
+    %   - not all methods/properties are documented below.
+    %   * indicates methods/properties still in development.
+    %
+    % Known Issue(s)
+    %   - Creating and re-creating objects:
+    %       ur = URQt('UR3e');
+    %       ur = URQt('UR3e');
+    %    -> This results in an object with a closed IP connection!
+    %    -> To correcty reinitialize, use:
+    %       ur = URQt('UR3e');
+    %       clear ur
+    %       ur = URQt('UR3e');
+    %
     % URQt Methods
     %   Initialize   - Initialize the URQt object.
     %   isMoving     - Determine whether the UR is currently moving.
@@ -56,25 +70,37 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %                 units (x,y,z) that are specified in millimeters
     %
     % -Movement Parameters
-    %   MoveType    % String describing move type (LinearTask or LinearJoint)
-    %   JointAcc    % Joint acceleration of leading axis (rad/s^2)
-    %   JointVel    % Joint speed of leading axis (rad/s)
-    %   TaskAcc     % Task acceleration (mm/s^2)
-    %   TaskVel     % Task speed (mm/s)
-    %   BlendRadius % Blend radius between movements (mm)
-    %   *MoveTime   % Movement time (s)
+    %   WaitOn      - Binary that automatically induces WaitForMove and
+    %                 WaitForGrip when set to true
+    %   MoveType    - String describing move type (LinearTask or LinearJoint)
+    %   JointAcc    - Joint acceleration of leading axis (rad/s^2)
+    %   JointVel    - Joint speed of leading axis (rad/s)
+    %   TaskAcc     - Task acceleration (mm/s^2)
+    %   TaskVel     - Task speed (mm/s)
+    %   BlendRadius - Blend radius between movements (mm)
+    %   *MoveTime   - Movement time (s)
     %
     % -Frame Definitions
     %   *FrameT      - Tool Frame (transformation relative to the
     %                 End-effector Frame)
     %
-    % -
-    %
     % Example:
+    %       % Create and initialize hardware (WaitOn = true) -------------
+    %       ur3e = URQt('UR3e');  % Create URQt object & designate UR3e
+    %       ur3e.Initialize;      % Initialize object
     %
-    %       % Create and initialize hardware
-    %       ur3e = URQt;              % Create URQt object
-    %       ur3e.Initialize('UR3e');  % Designate as UR3e
+    %       % Send hardware to stow configuration
+    %       ur3e.Stow;
+    %       % Send hardware to home configuration
+    %       ur3e.Home;
+    %       % Send hardware to specified joint configuration
+    %       ur3e.Joints = 2*pi*rand(1,6); % <--- BE CAREFUL!!!
+    %       % ------------------------------------------------------------
+    %
+    %       % Create and initialize hardware (WaitOn = false) ------------
+    %       ur3e = URQt('UR3e');  % Create URQt object & designate UR3e
+    %       ur3e.Initialize;      % Initialize object
+    %       ur3e.WaitOn = false;  % Turn off automatic wait
     %
     %       % Send hardware to stow configuration
     %       ur3e.Stow;
@@ -85,6 +111,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %       % Send hardware to specified joint configuration
     %       ur3e.Joints = 2*pi*rand(1,6); % <--- BE CAREFUL!!!
     %       ur3e.WaitForMove;
+    %       % ------------------------------------------------------------
     %
     % See also
     %
@@ -93,6 +120,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % Updates
     %   26Aug2021 - Corrected get GripForce, converted GripForce and 
     %               GripSpeed to percentages
+    %   30Aug2021 - WaitOn functionality
     
     % --------------------------------------------------------------------
     % General properties
@@ -119,11 +147,12 @@ classdef URQt < matlab.mixin.SetGet % Handle
         ToolPose    % 4x4 homogeneous transform representing the tool pose relative to the world frame
         ToolTask    % 1x6 array containing tool pose in task space
         GripPosition    % scalar value for gripper position (mm)
-        GripSpeed       % scalar value for gripper speed (TBD/s)
-        GripForce       % scalar value for gripper force (TBD)
-    end % end properties
+        GripSpeed       % scalar value for gripper speed (percent)
+        GripForce       % scalar value for gripper force (percent)
+    end
     
     properties(GetAccess='public', SetAccess='public')
+        WaitOn      % Binary describing whether to automatically call WaitForMove and WaitForGrip
         MoveType    % String describing move type (LinearTask or LinearJoint)
         JointAcc    % Joint acceleration of leading axis (rad/s^2)
         JointVel    % Joint speed of leading axis (rad/s)
@@ -163,6 +192,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % Constructor/Destructor
     % --------------------------------------------------------------------
     methods(Access='public')
+        
+        % Create Object --------------------------------------------------
         function obj = URQt(varargin)
             % Create URQt Object
             
@@ -173,6 +204,13 @@ classdef URQt < matlab.mixin.SetGet % Handle
             
             % Define Qt executable name
             obj.QtEXE = 'Roswell.exe';
+            
+            % Kill existing instances of Qt
+            if obj.isQtRunning
+                fprintf('Killing existing instance of "%s"...',obj.QtEXE);
+                obj.killQt;
+                fprintf('SUCCESS\n');
+            end
             
             % Initialize Qt Interface
             fprintf('Starting Qt interface...');
@@ -227,7 +265,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
             end
             
         end
+        % ----------------------------------------------------------------
         
+        % Delete Object --------------------------------------------------
         function delete(obj)
             % Object destructor
             
@@ -252,6 +292,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
             end
             
         end
+        % ----------------------------------------------------------------
+        
     end % end methods
     
     % --------------------------------------------------------------------
@@ -289,6 +331,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.ConnectTimeout = 10;
             
             % Initialize parameters
+            obj.WaitOn   = true;
             obj.MoveType = 'LinearJoint';
             obj.JointAcc = deg2rad(80); % rad/s^2
             obj.JointVel = deg2rad(60); % rad/s
@@ -468,6 +511,14 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 'No tasks are running which match the specified criteria.');
         end
         
+        function tf = killQt(obj)
+            % Kill Qt process
+            str = sprintf('taskkill /IM "%s" /F',obj.QtEXE);
+            [~,cmdout] = system(str);
+            %sprintf('%s/n',cmdout);
+            tf = true;
+        end
+        
         function tf = existQt(obj)
             % Check if server exists
             str = fullfile(obj.QtPath,obj.QtEXE);
@@ -572,6 +623,25 @@ classdef URQt < matlab.mixin.SetGet % Handle
             end
         end
         
+        % WaitOn
+        function waitOn = get.WaitOn(obj)
+            waitOn = obj.WaitOn;
+        end
+        
+        function set.WaitOn(obj,waitOn)
+            if ~islogical(waitOn)
+                switch waitOn
+                    case 0
+                        waitOn = false;
+                    case 1
+                        waitOn = true;
+                    otherwise
+                        error('Unrecognized WaitOn "%s". Please use a binary value.',waitOn);
+                end
+            end
+            obj.WaitOn = waitOn;
+        end
+        
         % Move Type
         function moveType = get.MoveType(obj)
             moveType = obj.MoveType;
@@ -631,6 +701,11 @@ classdef URQt < matlab.mixin.SetGet % Handle
             
             obj.sendMsg(msg);
             rsp = obj.receiveMsg(1,'uint8');
+            
+            % Wait for move
+            if obj.WaitOn
+                obj.WaitForMove;
+            end
         end
         
         % JointI - individaul joints of the robot
@@ -759,7 +834,13 @@ classdef URQt < matlab.mixin.SetGet % Handle
             
             obj.sendMsg(msg);
             rsp = obj.receiveMsg(1,'uint8');
+            
+            % Wait for move
+            if obj.WaitOn
+                obj.WaitForMove;
+            end
         end
+        
         % Grip Position
         function gPos = get.GripPosition(obj)
             msg = 'get pos\n';
@@ -780,6 +861,11 @@ classdef URQt < matlab.mixin.SetGet % Handle
             gPos_uint8 = uint8( gPos*(255/52) );
             msg = sprintf('set pos %d\n',gPos_uint8);
             obj.sendMsg(msg);
+            
+            % Wait for move
+            if obj.WaitOn
+                obj.WaitForGrip;
+            end
         end
         
         % Grip Speed

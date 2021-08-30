@@ -21,9 +21,9 @@ function varargout = URQtToolboxVer
 %   20May2021 - Added isGripMoving and WaitForGrip methods
 
 A.Name = 'Universal Robot Qt Toolbox';
-A.Version = '1.0.3';
+A.Version = '1.0.4';
 A.Release = '(R2021a)';
-A.Date = '20-May-2021';
+A.Date = '30-Aug-2021';
 A.URLVer = 1;
 
 msg{1} = sprintf('MATLAB %s Version: %s %s',A.Name, A.Version, A.Release);

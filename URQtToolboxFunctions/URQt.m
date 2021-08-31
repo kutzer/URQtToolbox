@@ -8,11 +8,13 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   * indicates methods/properties still in development.
     %
     % Known Issue(s)
-    %   - Creating and re-creating objects:
+    % (1) Overwriting an existing URQt object calls the object destructor
+    %     after the object constructor resulting in a closed IP connection 
+    %    BAD: Creating and overwriting a URQt object:
     %       ur = URQt('UR3e');
     %       ur = URQt('UR3e');
-    %    -> This results in an object with a closed IP connection!
-    %    -> To correcty reinitialize, use:
+    %     -> This results in an object with a closed IP connection!
+    %   GOOD: To correctly reinitialize an object, use:
     %       ur = URQt('UR3e');
     %       clear ur
     %       ur = URQt('UR3e');
@@ -62,10 +64,10 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %                 units (x,y,z) that are specified in millimeters
     %
     % -Tool pose
-    %   *ToolPose    - 4x4 rigid body transform defining the tool pose
+    %   *ToolPose   - 4x4 rigid body transform defining the tool pose
     %                 relative to the world frame (linear units are defined
     %                 in millimeters)
-    %   *ToolTask    - 1x6 array of [x,y,z,r1,r2,r3] matching the task
+    %   *ToolTask   - 1x6 array of [x,y,z,r1,r2,r3] matching the task
     %                 variables used by UR with the exception of linear
     %                 units (x,y,z) that are specified in millimeters
     %
@@ -81,11 +83,11 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   *MoveTime   - Movement time (s)
     %
     % -Frame Definitions
-    %   *FrameT      - Tool Frame (transformation relative to the
+    %   *FrameT     - Tool Frame (transformation relative to the
     %                 End-effector Frame)
     %
     % Example:
-    %       % Create and initialize hardware (WaitOn = true) -------------
+    %       % Create and initialize hardware (WaitOn = true [DEFAULT]) ---
     %       ur3e = URQt('UR3e');  % Create URQt object & designate UR3e
     %       ur3e.Initialize;      % Initialize object
     %
@@ -114,6 +116,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %       % ------------------------------------------------------------
     %
     % See also
+    %   URQtToolboxUpdate URQtToolboxVer
     %
     %   M. Kutzer 26Mar2021, USNA
     
@@ -121,6 +124,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   26Aug2021 - Corrected get GripForce, converted GripForce and 
     %               GripSpeed to percentages
     %   30Aug2021 - WaitOn functionality
+    %   31Aug2021 - Added JointAcc, JointVel, TaskAcc, and TaskVel limits 
+    %               to set functions
     
     % --------------------------------------------------------------------
     % General properties
@@ -661,6 +666,74 @@ classdef URQt < matlab.mixin.SetGet % Handle
                     error('Unrecognized MoveType "%s"',moveType);
             end
             obj.MoveType = moveType;
+        end
+        
+        % Joint Acceleration
+        function jointAcc = get.JointAcc(obj)
+            jointAcc = obj.JointAcc;
+        end
+        
+        function set.JointAcc(obj,jointAcc)
+            if jointAcc < 0
+                warning('Joint acceleration must be between 0 and 80*pi rad/sec^2.  Setting to 0 rad/sec^2.');
+                jointAcc = 0;
+            end
+            if jointAcc > 80*pi
+                warning('Joint acceleration must be between 0 and 80*pi rad/sec^2. Setting to 80*pi rad/sec^2.');
+                jointAcc = 80*pi;
+            end
+            obj.JointAcc = jointAcc;
+        end
+        
+        % Joint velocity
+        function jointVel = get.JointVel(obj)
+            jointVel = obj.JointVel;
+        end
+        
+        function set.JointVel(obj,jointVel)
+            if jointVel < 0
+                warning('Joint velocity must be between 0 and 2*pi rad/sec. Setting to 0 rad/sec.');
+                jointVel = 0;
+            end
+            if jointVel > 80*pi
+                warning('Joint acceleration must be between 0 and 2*pi rad/sec. Setting to 2*pi rad/sec.');
+                jointVel = 2*pi;
+            end
+            obj.JointVel = jointVel;
+        end
+        
+        % Task acceleration
+        function taskAcc = get.TaskAcc(obj)
+            taskAcc = obj.TaskAcc;
+        end
+        
+        function set.TaskAcc(obj,taskAcc)
+            if taskAcc < 0
+                warning('Task acceleration must be between 0 and 150,000 mm/sec^2. Setting to 0 mm/sec^2.');
+                taskAcc = 0;
+            end
+            if taskAcc > 80*pi
+                warning('Task acceleration must be between 0 and 150,000 mm/sec^2. Setting to 150,000 mm/sec^2.');
+                taskAcc = 150000;
+            end
+            obj.TaskAcc = taskAcc;
+        end
+        
+        % Task velocity
+        function taskVel = get.TaskVel(obj)
+            taskVel = obj.TaskVel;
+        end
+        
+        function set.TaskVel(obj,taskVel)
+            if taskVel < 0
+                warning('Task velocity must be between 0 and 3,000 mm/sec. Setting to 0 mm/sec.');
+                taskVel = 0;
+            end
+            if taskVel > 80*pi
+                warning('Task velocity must be between 0 and 3,000 mm/sec. Setting to 3,000 mm/sec.');
+                taskVel = 3000;
+            end
+            obj.TaskVel = taskVel;
         end
         
         % Joints - 1x6 array containing joint values (radians)

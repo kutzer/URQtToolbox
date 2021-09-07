@@ -307,6 +307,7 @@ end
 fprintf('SUCCESS\n');
 
 %% Download and unzip toolbox (GitHub)
+% UPDATED: 07Sep2021, M. Kutzer
 %url = sprintf('https://github.com/kutzer/%sToolbox/archive/master.zip',toolboxName); <--- Github removed references to "master"
 %url = sprintf('https://github.com/kutzer/%sToolbox/archive/refs/heads/main.zip',toolboxName);
 

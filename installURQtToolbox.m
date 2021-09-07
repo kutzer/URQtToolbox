@@ -317,33 +317,25 @@ for i = 1:numel(defBranches)
     defBranch = defBranches{i};
     url = sprintf('https://github.com/kutzer/%sToolbox/archive/refs/heads/%s.zip',...
         toolboxName,defBranch);
-    % Check url
-    [~,status] = urlread(url);
-    fprintf('Checking for branch "%s"...',defBranch);
-    if status
-        fprintf('FOUND\n');
-        break
-    else
-        fprintf('INVALID\n');
-    end
-end
-
-% Download and unzip repository
-fprintf('Downloading the %s Toolbox...',toolboxName);
-try
-    %fnames = unzip(url,pname);
-    %urlwrite(url,fullfile(pname,tmpFname));
-    tmpFname = sprintf('%sToolbox-master.zip',toolboxName);
-    websave(fullfile(pname,tmpFname),url);
-    fnames = unzip(fullfile(pname,tmpFname),pname);
-    delete(fullfile(pname,tmpFname));
     
-    fprintf('SUCCESS\n');
-    confirm = true;
-catch ME
-    fprintf('FAILED\n');
-    confirm = false;
-    fprintf(2,'ERROR MESSAGE:\n\t%s\n',ME.message);
+    % Download and unzip repository
+    fprintf('Downloading the %s Toolbox ("%s" branch)...',toolboxName,defBranch);
+    try
+        %fnames = unzip(url,pname);
+        %urlwrite(url,fullfile(pname,tmpFname));
+        tmpFname = sprintf('%sToolbox-master.zip',toolboxName);
+        websave(fullfile(pname,tmpFname),url);
+        fnames = unzip(fullfile(pname,tmpFname),pname);
+        delete(fullfile(pname,tmpFname));
+        
+        fprintf('SUCCESS\n');
+        confirm = true;
+        break
+    catch ME
+        fprintf('"%s" branch does not exist\n',defBranch);
+        confirm = false;
+        %fprintf(2,'ERROR MESSAGE:\n\t%s\n',ME.message);
+    end
 end
 
 %% Check for successful download

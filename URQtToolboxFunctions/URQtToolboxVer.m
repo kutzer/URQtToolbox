@@ -19,11 +19,13 @@ function varargout = URQtToolboxVer
 %   01Apr2021 - Updated class to include model, Jacobian, and DH table
 %   12Apr2021 - Documentation updates
 %   20May2021 - Added isGripMoving and WaitForGrip methods
+%   06Oct2021 - Corrected Joint/Task Vel/Acc limits and added 2-second
+%               pause to *.Initialize to account for QtEXE startup
 
 A.Name = 'Universal Robot Qt Toolbox';
-A.Version = '1.0.4';
+A.Version = '1.0.5';
 A.Release = '(R2021a)';
-A.Date = '30-Aug-2021';
+A.Date = '06-Oct-2021';
 A.URLVer = 1;
 
 msg{1} = sprintf('MATLAB %s Version: %s %s',A.Name, A.Version, A.Release);

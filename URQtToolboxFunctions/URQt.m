@@ -126,6 +126,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   30Aug2021 - WaitOn functionality
     %   31Aug2021 - Added JointAcc, JointVel, TaskAcc, and TaskVel limits 
     %               to set functions
+    %   06Oct2021 - Updated if statements for JointVel, TaskVel, and
+    %               TaskAcc to match true peak values 
+    %   06Oct2021 - Updated to add 2-second pause in Initialize
     
     % --------------------------------------------------------------------
     % General properties
@@ -188,9 +191,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % Internal properties
     % --------------------------------------------------------------------
     properties(GetAccess='public', SetAccess='private', Hidden=true)
-        QtPath      % Path of Qt executable
-        QtEXE       % Name of Qt executable
-        Joints_Old	% Previous joint configuration (used with Undo)
+        QtPath        % Path of Qt executable
+        QtEXE         % Name of Qt executable
+        Joints_Old    % Previous joint configuration (used with Undo)
     end
     
     % --------------------------------------------------------------------
@@ -268,7 +271,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                     obj.URmodel = [];
                 end
             end
-            
+
         end
         % ----------------------------------------------------------------
         
@@ -315,6 +318,19 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Initialize(obj,URmodel,IP)
             %
             % Initialize(obj,URmodel,IP,Port)
+            
+            % Wait for QtEXE to start fully
+            fprintf('Waiting for Qt Executable...');
+            t0 = tic;
+            tf = 2;
+            g = gifwait(0,'Waiting for Qt Executable...');
+            t = toc(t0);
+            while t < tf
+                g = gifwait(g);
+                t = toc(t0);
+            end
+            delete(g.fig);
+            fprintf('SUCCESS\n');
             
             % Clear old TCP client(s)
             if ~isempty( obj.Client )
@@ -378,7 +394,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                     % Wait for arm to boot
                     t0 = tic;
                     tf = 30;
-                    g = gifwait(0,'Initializing arm');
+                    g = gifwait(0,'Initializing arm...');
                     while obj.Client.BytesAvailable == 0
                         g = gifwait(g);
                         t = toc(t0);
@@ -695,7 +711,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 warning('Joint velocity must be between 0 and 2*pi rad/sec. Setting to 0 rad/sec.');
                 jointVel = 0;
             end
-            if jointVel > 80*pi
+            if jointVel > 2*pi
                 warning('Joint acceleration must be between 0 and 2*pi rad/sec. Setting to 2*pi rad/sec.');
                 jointVel = 2*pi;
             end
@@ -712,7 +728,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 warning('Task acceleration must be between 0 and 150,000 mm/sec^2. Setting to 0 mm/sec^2.');
                 taskAcc = 0;
             end
-            if taskAcc > 80*pi
+            if taskAcc > 150000
                 warning('Task acceleration must be between 0 and 150,000 mm/sec^2. Setting to 150,000 mm/sec^2.');
                 taskAcc = 150000;
             end
@@ -729,7 +745,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 warning('Task velocity must be between 0 and 3,000 mm/sec. Setting to 0 mm/sec.');
                 taskVel = 0;
             end
-            if taskVel > 80*pi
+            if taskVel > 3000
                 warning('Task velocity must be between 0 and 3,000 mm/sec. Setting to 3,000 mm/sec.');
                 taskVel = 3000;
             end

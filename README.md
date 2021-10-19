@@ -5,7 +5,7 @@ Universal Robot Toolbox for MATLAB leveraging Qt
 1. Download "URQtToolbox.zip" (or alternate version)
 2. Unzip/Extract "URQtToolbox.zip"
 3. Open MATLAB as an administrator
-4. Change your MATLAB Current Directory to the location containing contents of the unzipped TransformationToolbox
+4. Change your MATLAB Current Directory to the location containing contents of the unzipped URQtToolbox
 5. Run "installURQtToolbox"
 
 ## Update Instructions

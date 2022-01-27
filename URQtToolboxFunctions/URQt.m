@@ -277,7 +277,22 @@ classdef URQt < matlab.mixin.SetGet % Handle
                     obj.URmodel = [];
                 end
             end
-
+            
+            while isempty( obj.URmodel )
+                warning('Unacceptable UR Model specified.');
+                [s,v] = listdlg(...
+                    'Name','Select Model',...
+                    'PromptString','Select UR model:',...
+                    'SelectionMode','single',...
+                    'ListString',URmods);
+                if v
+                    % User selected model
+                    obj.URmodel = URmods{s};
+                else
+                    % No value selected.
+                    obj.URmodel = [];
+                end
+            end
         end
         % ----------------------------------------------------------------
         
@@ -806,7 +821,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 strJlims  = fcnJointLimitsSTR(joints,q_lims,tf_min,tf_max,tf_nan);
                 str = sprintf(...
                     ['The joint configuration specified ',...
-                    'exceeds the robot joint limits:\n%s%s\nIgnoring Command.'],...
+                    'exceeds the robot joint limits:\n%s\nIgnoring Command.\n'],...
                     strJlims);
 
                 warning(str);
@@ -1133,9 +1148,10 @@ str = sprintf('%s\tur.Initialize(''%s'');',str,obj.URmodel);
 end
 
 function str = fcnJointLimitsSTR(joints,q_lims,tf_min,tf_max,tf_nan)
+str = [];
 for i = 1:numel(joints)
     if tf_min(i)
-        str = sprintf('\tJoint %d:\n',i);
+        str = sprintf('\tJoint %d:\n',str,i);
         str = sprintf('%s\t\tValue Returned: %f\n',str,joints(i));
         str = sprintf('%s\t\tLower Limit:    %f\n',str,q_lims(i,1));
     end

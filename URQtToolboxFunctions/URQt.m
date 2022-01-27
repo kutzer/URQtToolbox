@@ -178,6 +178,11 @@ classdef URQt < matlab.mixin.SetGet % Handle
         FrameT      % Tool Frame (transformation relative to the End-effector Frame)
     end % end properties
     
+    properties(GetAccess='public', SetAccess='private')
+        JointPositionLimits % Joint position limits (radians)
+        JointVelocityLimits % Joint velocity limits (radians/sec)
+    end % end properties
+    
     properties(GetAccess='public', SetAccess='public', Hidden=true)
         Joint1      % Joint 1 value (radians)
         Joint2      % Joint 2 value (radians)
@@ -249,7 +254,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
             
             % Select robot
             % -> Define supported robot models
-            URmods = {'UR3','UR3e','UR5','UR5e','UR10','UR10e'};
+            %URmods = {'UR3','UR3e','UR5','UR5e','UR10','UR10e'};
+            URmods = {'UR3e','UR5e','UR10e'};
             if nargin < 1
                 [s,v] = listdlg(...
                     'Name','Select Model',...
@@ -359,6 +365,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.TaskAcc  = 100.0;       % mm/s^2
             obj.TaskVel  = 100.0;       % mm/s
             obj.BlendRadius = 0;        % mm
+            [q_lims,dq_lims] = UR_jlims(obj.URmodel);
+            obj.JointPositionLimits = q_lims;
+            obj.JointVelocityLimits = dq_lims;
             
             % TODO - specify and use terminator
             % TODO - specify terminator callback function
@@ -492,10 +501,10 @@ classdef URQt < matlab.mixin.SetGet % Handle
             joints = [...
                 -1.570782,...
                 -3.141604,...
-                2.652899,...
+                 2.652899,...
                 -4.223715,...
-                0.000023,...
-                4.712387];
+                 0.000023,...
+                 4.712387];
             obj.Joints = joints;
         end
         
@@ -690,6 +699,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
         
         function set.JointAcc(obj,jointAcc)
+            % TODO - Update to make model specific, this may be robot specific
             if jointAcc < 0
                 warning('Joint acceleration must be between 0 and 80*pi rad/sec^2.  Setting to 0 rad/sec^2.');
                 jointAcc = 0;
@@ -707,6 +717,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
         
         function set.JointVel(obj,jointVel)
+            % TODO - Update to make model specific, this may be robot specific
             if jointVel < 0
                 warning('Joint velocity must be between 0 and 2*pi rad/sec. Setting to 0 rad/sec.');
                 jointVel = 0;
@@ -759,11 +770,48 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.sendMsg(msg);
             joints = obj.receiveMsg(6,'double');
             joints = reshape(joints,[],1);
+            
+            % Check joint configuration against limits
+            q_lims = obj.JointPositionLimits;
+            tf_min = joints < q_lims(:,1);
+            tf_max = joints > q_lims(:,2);
+            tf_nan = isnan(joints);
+            
+            if nnz(tf_min) > 0 || nnz(tf_max) > 0 || nnz(tf_nan)
+                strJlims  = fcnJointLimitsSTR(joints,q_lims,tf_min,tf_max,tf_nan);
+                strReinit = fcnReinitializeSTR;
+                str = sprintf(...
+                    ['The joint configuration returned from the ',...
+                    'controller exceeds the robot joint limits:\n%s%s'],...
+                    strJlims,strReinit);
+
+                warning(str);
+                
+                joints = nan(6,1);
+            end
         end
         
         function set.Joints(obj,joints)
             % Set the joint configuration of the simulation
             % movej([0,1.57,-1.57,3.14,-1.57,1.57],a=1.4, v=1.05, t=0, r=0)
+            joints = reshape(joints,[],1);
+
+            % Check joint configuration against limits
+            q_lims = obj.JointPositionLimits;
+            tf_min = joints < q_lims(:,1);
+            tf_max = joints > q_lims(:,2);
+            tf_nan = isnan(joints);
+            
+            if nnz(tf_min) > 0 || nnz(tf_max) > 0 || nnz(tf_nan)
+                strJlims  = fcnJointLimitsSTR(joints,q_lims,tf_min,tf_max,tf_nan);
+                str = sprintf(...
+                    ['The joint configuration specified ',...
+                    'exceeds the robot joint limits:\n%s%s\nIgnoring Command.'],...
+                    strJlims);
+
+                warning(str);
+                return
+            end
             
             % Check specified joint array
             if numel(joints) ~= 6
@@ -1075,3 +1123,30 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
     end % end methods
 end % end classdef
+
+%% Internal functions
+function str = fcnReinitializeSTR
+str = sprintf('\nConsider re-initializing communications with the robot:\n');
+str = sprintf('%s\tclear ur\n',str);
+str = sprintf('%s\tur = URQt;\n',str);
+str = sprintf('%s\tur.Initialize(''%s'');',str,obj.URmodel);
+end
+
+function str = fcnJointLimitsSTR(joints,q_lims,tf_min,tf_max,tf_nan)
+for i = 1:numel(joints)
+    if tf_min(i)
+        str = sprintf('\tJoint %d:\n',i);
+        str = sprintf('%s\t\tValue Returned: %f\n',str,joints(i));
+        str = sprintf('%s\t\tLower Limit:    %f\n',str,q_lims(i,1));
+    end
+    if tf_max(i)
+        str = sprintf('%s\tJoint %d:\n',str,i);
+        str = sprintf('%s\t\tValue Returned: %f\n',str,joints(i));
+        str = sprintf('%s\t\tUpper Limit:    %f\n',str,q_lims(i,2));
+    end
+    if tf_nan(i)
+        str = sprintf('%s\tJoint %d:\n',str,i);
+        str = sprintf('%s\t\tValue Returned: %f (Not a Number)\n',str,joints(i));
+    end
+end
+end

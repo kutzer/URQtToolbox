@@ -238,10 +238,13 @@ classdef URQt < matlab.mixin.SetGet % Handle
                         fprintf(2,'DEBUG DISABLED: *.QtDebug = false;\n');
                     end
                 else
+                    obj.QtDebug = false;
                     fprintf(2,'Non scalar or non logical debug flag specified.\n');
                     fprintf(2,'\tExample: "obj = URQt(''UR3e'',true)" to call debug\n')
                     fprintf(2,'DEBUG DISABLED: *.QtDebug = false;\n');
                 end
+            else
+                obj.QtDebug = false;
             end
             
             % Create URQt Object

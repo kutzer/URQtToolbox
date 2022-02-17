@@ -24,6 +24,7 @@ function varargout = URQtToolboxVer
 %   27Jan2022 - Added joint limit checks
 %   27Jan2022 - Removed CB controller models from viable UR options
 %   17Feb2022 - Added *.QtDebug for testing with Roswell debug
+%   17Feb2022 - Added ServoJ and updated Roswell
 
 A.Name = 'Universal Robot Qt Toolbox';
 A.Version = '1.0.7';

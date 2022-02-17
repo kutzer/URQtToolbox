@@ -9,7 +9,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %
     % Known Issue(s)
     % (1) Overwriting an existing URQt object calls the object destructor
-    %     after the object constructor resulting in a closed IP connection 
+    %     after the object constructor resulting in a closed IP connection
     %    BAD: Creating and overwriting a URQt object:
     %       ur = URQt('UR3e');
     %       ur = URQt('UR3e');
@@ -32,6 +32,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   get          - Query properties of the URQt object.
     %   set          - Update properties of the URQt object.
     %   delete       - Delete the URQt object and all attributes.
+    %
+    %   -URScript Programming Commands (Methods)
+    %       ServoJ      - Sends a servoj command to the controller
     %
     % URQt Properties
     % -Qt Connection
@@ -72,15 +75,19 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %                 units (x,y,z) that are specified in millimeters
     %
     % -Movement Parameters
-    %   WaitOn      - Binary that automatically induces WaitForMove and
-    %                 WaitForGrip when set to true
-    %   MoveType    - String describing move type (LinearTask or LinearJoint)
-    %   JointAcc    - Joint acceleration of leading axis (rad/s^2)
-    %   JointVel    - Joint speed of leading axis (rad/s)
-    %   TaskAcc     - Task acceleration (mm/s^2)
-    %   TaskVel     - Task speed (mm/s)
-    %   BlendRadius - Blend radius between movements (mm)
-    %   *MoveTime   - Movement time (s)
+    %   WaitOn        - Binary that automatically induces WaitForMove and
+    %                   WaitForGrip when set to true
+    %   MoveType      - String describing move type (LinearTask or LinearJoint)
+    %   JointAcc      - Joint acceleration of leading axis (rad/s^2)
+    %   JointVel      - Joint speed of leading axis (rad/s)
+    %   TaskAcc       - Task acceleration (mm/s^2)
+    %   TaskVel       - Task speed (mm/s)
+    %   BlendRadius   - Blend radius between movements (mm)
+    %   *MoveTime     - Movement time (s)
+    %   Gain          - proportional gain for following target position,
+    %                   range [100,2000]
+    %   LookAheadTime - time [S], range [0.03,0.2] smoothens the trajectory
+    %                   with this lookahead time
     %
     % -Frame Definitions
     %   *FrameT     - Tool Frame (transformation relative to the
@@ -121,13 +128,13 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   M. Kutzer 26Mar2021, USNA
     
     % Updates
-    %   26Aug2021 - Corrected get GripForce, converted GripForce and 
+    %   26Aug2021 - Corrected get GripForce, converted GripForce and
     %               GripSpeed to percentages
     %   30Aug2021 - WaitOn functionality
-    %   31Aug2021 - Added JointAcc, JointVel, TaskAcc, and TaskVel limits 
+    %   31Aug2021 - Added JointAcc, JointVel, TaskAcc, and TaskVel limits
     %               to set functions
     %   06Oct2021 - Updated if statements for JointVel, TaskVel, and
-    %               TaskAcc to match true peak values 
+    %               TaskAcc to match true peak values
     %   06Oct2021 - Updated to add 2-second pause in Initialize
     
     % --------------------------------------------------------------------
@@ -168,6 +175,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
         TaskVel     % Task speed (mm/s)
         BlendRadius % Blend radius between movements (mm)
         %MoveTime   % Movement time (s)
+        Gain          % Used with ServoJ method
+        BlockingTime  % Used with ServoJ method
+        LookAheadTime % Used with ServoJ method
     end
     properties(GetAccess='public', SetAccess='private')
         Jacobian    % Jacobian associated with robot
@@ -421,6 +431,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.TaskAcc  = 100.0;       % mm/s^2
             obj.TaskVel  = 100.0;       % mm/s
             obj.BlendRadius = 0;        % mm
+            obj.Gain = 100;             % proportional gain, Used with ServoJ method
+            obj.BlockingTime = 0.05;    % s, Used with ServoJ method
+            obj.LookAheadTime = 0.1;    % s, Used with ServoJ method
             [q_lims,dq_lims] = UR_jlims(obj.URmodel);
             obj.JointPositionLimits = q_lims;
             obj.JointVelocityLimits = dq_lims;
@@ -429,7 +442,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % TODO - specify terminator callback function
             fprintf('Initializing TCP Client: IP %s, Port %d...',...
                 obj.IP,obj.Port);
-
+            
             obj.Client = tcpclient(obj.IP,obj.Port,...
                 'Timeout',obj.Timeout,...
                 'ConnectTimeout',obj.ConnectTimeout);
@@ -557,10 +570,10 @@ classdef URQt < matlab.mixin.SetGet % Handle
             joints = [...
                 -1.570782,...
                 -3.141604,...
-                 2.652899,...
+                2.652899,...
                 -4.223715,...
-                 0.000023,...
-                 4.712387];
+                0.000023,...
+                4.712387];
             obj.Joints = joints;
         end
         
@@ -580,6 +593,28 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
         
     end % end methods
+    
+    % --------------------------------------------------------------------
+    % URScript Programming Methods
+    % --------------------------------------------------------------------
+    methods(Access='public')
+        function ServoJ(obj,q)
+            % TODO - check joint limits
+            
+            % Get necessary properties
+            a = 0; % <-- Not used in current version
+            v = 0; % <-- Not used in current version
+            gain = obj.Gain;
+            t = obj.BlockingTime;
+            lookAheadTime = obj.LookAheadTime;
+            
+            msg = sprintf('servoj([%.4f,%.4f,%.4f,%.4f,%.4f,%.4f], %d, %d, %.3f, %.3f, %.3f)\n',...
+                q(1),q(2),q(3),q(4),q(5),q(6),a,v,t,lookAheadTime,gain);
+            
+            obj.sendMsg(msg);
+            rsp = obj.receiveMsg(1,'uint8');
+        end
+    end
     
     % --------------------------------------------------------------------
     % Private Methods
@@ -840,7 +875,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                     ['The joint configuration returned from the ',...
                     'controller exceeds the robot joint limits:\n%s%s'],...
                     strJlims,strReinit);
-
+                
                 warning(str);
                 
                 joints = nan(6,1);
@@ -851,7 +886,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Set the joint configuration of the simulation
             % movej([0,1.57,-1.57,3.14,-1.57,1.57],a=1.4, v=1.05, t=0, r=0)
             joints = reshape(joints,[],1);
-
+            
             % Check joint configuration against limits
             q_lims = obj.JointPositionLimits;
             tf_min = joints < q_lims(:,1);
@@ -864,7 +899,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                     ['The joint configuration specified ',...
                     'exceeds the robot joint limits:\n%s\nIgnoring Command.\n'],...
                     strJlims);
-
+                
                 warning(str);
                 return
             end

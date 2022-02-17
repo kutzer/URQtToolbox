@@ -33,8 +33,10 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   set          - Update properties of the URQt object.
     %   delete       - Delete the URQt object and all attributes.
     %
-    %   -URScript Programming Commands (Methods)
-    %       ServoJ      - Sends a servoj command to the controller
+    % URQt Methods (URScript Programming Commands)
+    % - See "URScript Programming Language" v5.9
+    %   ServoJ      - Sends a servoj command to the controller
+    %   SpeedJ      - Sends a speedj command to the controller
     %
     % URQt Properties
     % -Qt Connection
@@ -176,7 +178,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
         BlendRadius % Blend radius between movements (mm)
         %MoveTime   % Movement time (s)
         Gain          % Used with ServoJ method
-        BlockingTime  % Used with ServoJ method
+        BlockingTime  % Used with ServoJ & SpeedJ methods
         LookAheadTime % Used with ServoJ method
     end
     properties(GetAccess='public', SetAccess='private')
@@ -435,7 +437,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.TaskVel  = 100.0;       % mm/s
             obj.BlendRadius = 0;        % mm
             obj.Gain = 100;             % proportional gain, Used with ServoJ method
-            obj.BlockingTime = 0.05;    % s, Used with ServoJ method
+            obj.BlockingTime = 0.05;    % s, Used with ServoJ & SpeedJ methods
             obj.LookAheadTime = 0.1;    % s, Used with ServoJ method
             [q_lims,dq_lims] = UR_jlims(obj.URmodel);
             obj.JointPositionLimits = q_lims;
@@ -613,6 +615,20 @@ classdef URQt < matlab.mixin.SetGet % Handle
             
             msg = sprintf('servoj([%.4f,%.4f,%.4f,%.4f,%.4f,%.4f], %d, %d, %.3f, %.3f, %.3f)\n',...
                 q(1),q(2),q(3),q(4),q(5),q(6),a,v,t,lookAheadTime,gain);
+            
+            obj.sendMsg(msg);
+            rsp = obj.receiveMsg(1,'uint8');
+        end
+
+        function SpeedJ(obj,dq)
+            % TODO - check velocity limits
+            
+            % Get necessary properties
+            a = obj.JointAcc; % Joint acceleration of leading axis
+            t = obj.BlockingTime;
+            
+            msg = sprintf('speedj([%.4f,%.4f,%.4f,%.4f,%.4f,%.4f], %d, %d, %.3f, %.3f, %.3f)\n',...
+                dq(1),dq(2),dq(3),dq(4),dq(5),dq(6),a,t);
             
             obj.sendMsg(msg);
             rsp = obj.receiveMsg(1,'uint8');

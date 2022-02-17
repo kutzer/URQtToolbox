@@ -202,12 +202,38 @@ classdef URQt < matlab.mixin.SetGet % Handle
     end
     
     % --------------------------------------------------------------------
+    % Debug properties
+    % --------------------------------------------------------------------
+    properties(GetAccess='public', SetAccess='public', Hidden=true)
+        QtDebug     % Debug flag to surpress Rosette launch
+    end
+    
+    % --------------------------------------------------------------------
     % Constructor/Destructor
     % --------------------------------------------------------------------
     methods(Access='public')
         
         % Create Object --------------------------------------------------
         function obj = URQt(varargin)
+            % Apply debug flag
+            %   ENABLE DEBUG: obj = URQt('UR3e',true)
+            if nargin > 1
+                fprintf(2,'!!! DEBUG FLAG DETECTED !!!\n');
+                if islogical(varargin{2}) && numel(varargin{2}) == 1
+                    obj.QtDebug = varargin{2};
+                    
+                    if obj.QtDebug
+                        fprintf(2,'DEBUG ENABLED: *.QtDebug = true;\n');
+                    else
+                        fprintf(2,'DEBUG DISABLED: *.QtDebug = false;\n');
+                    end
+                else
+                    fprintf(2,'Non scalar or non logical debug flag specified.\n');
+                    fprintf(2,'\tExample: "obj = URQt(''UR3e'',true)" to call debug\n')
+                    fprintf(2,'DEBUG DISABLED: *.QtDebug = false;\n');
+                end
+            end
+            
             % Create URQt Object
             
             % Define Qt executable path
@@ -219,37 +245,47 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.QtEXE = 'Roswell.exe';
             
             % Kill existing instances of Qt
-            if obj.isQtRunning
-                fprintf('Killing existing instance of "%s"...',obj.QtEXE);
-                obj.killQt;
-                fprintf('SUCCESS\n');
+            if ~obj.QtDebug
+                if obj.isQtRunning
+                    fprintf('Killing existing instance of "%s"...',obj.QtEXE);
+                    obj.killQt;
+                    fprintf('SUCCESS\n');
+                end
+            else
+                fprintf(2,'DEBUG MODE: ')
+                fprintf(2,'*.killQt skipped.\n');
             end
             
             % Initialize Qt Interface
-            fprintf('Starting Qt interface...');
-            if ~obj.isQtRunning
-                if ~obj.existQt
-                    fprintf('"%s" not found, FAILED\n',obj.QtEXE);
-                    return
-                end
-                % Start Qt interface
-                obj.startQt;
-                % Check if Qt interface is running
-                t0 = tic;
-                tf = 30;
-                while ~obj.isQtRunning
-                    % Wait for server to start
-                    t = toc(t0);
-                    if t > tf
-                        fprintf('TIMEOUT\n');
-                        warning('Server did not start successfully.');
+            if ~obj.QtDebug
+                fprintf('Starting Qt interface...');
+                if ~obj.isQtRunning
+                    if ~obj.existQt
+                        fprintf('"%s" not found, FAILED\n',obj.QtEXE);
                         return
                     end
+                    % Start Qt interface
+                    obj.startQt;
+                    % Check if Qt interface is running
+                    t0 = tic;
+                    tf = 30;
+                    while ~obj.isQtRunning
+                        % Wait for server to start
+                        t = toc(t0);
+                        if t > tf
+                            fprintf('TIMEOUT\n');
+                            warning('Server did not start successfully.');
+                            return
+                        end
+                    end
+                    fprintf('SUCCESS\n');
+                else
+                    fprintf('SKIPPED\n');
+                    fprintf('\tQt interface is already running.\n');
                 end
-                fprintf('SUCCESS\n');
             else
-                fprintf('SKIPPED\n');
-                fprintf('\tQt interface is already running.\n');
+                fprintf(2,'DEBUG MODE: ')
+                fprintf(2,'*.startQt skipped.\n');
             end
             
             % Select robot
@@ -341,17 +377,22 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Initialize(obj,URmodel,IP,Port)
             
             % Wait for QtEXE to start fully
-            fprintf('Waiting for Qt Executable...');
-            t0 = tic;
-            tf = 2;
-            g = gifwait(0,'Waiting for Qt Executable...');
-            t = toc(t0);
-            while t < tf
-                g = gifwait(g);
+            if ~obj.QtDebug
+                fprintf('Waiting for Qt Executable...');
+                t0 = tic;
+                tf = 2;
+                g = gifwait(0,'Waiting for Qt Executable...');
                 t = toc(t0);
+                while t < tf
+                    g = gifwait(g);
+                    t = toc(t0);
+                end
+                delete(g.fig);
+                fprintf('SUCCESS\n');
+            else
+                fprintf(2,'DEBUG MODE: ')
+                fprintf(2,'Fixed wait for Qt Executable skipped.\n');
             end
-            delete(g.fig);
-            fprintf('SUCCESS\n');
             
             % Clear old TCP client(s)
             if ~isempty( obj.Client )
@@ -794,7 +835,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             
             if nnz(tf_min) > 0 || nnz(tf_max) > 0 || nnz(tf_nan)
                 strJlims  = fcnJointLimitsSTR(joints,q_lims,tf_min,tf_max,tf_nan);
-                strReinit = fcnReinitializeSTR;
+                strReinit = fcnReinitializeSTR(obj);
                 str = sprintf(...
                     ['The joint configuration returned from the ',...
                     'controller exceeds the robot joint limits:\n%s%s'],...
@@ -1140,7 +1181,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
 end % end classdef
 
 %% Internal functions
-function str = fcnReinitializeSTR
+function str = fcnReinitializeSTR(obj)
 str = sprintf('\nConsider re-initializing communications with the robot:\n');
 str = sprintf('%s\tclear ur\n',str);
 str = sprintf('%s\tur = URQt;\n',str);

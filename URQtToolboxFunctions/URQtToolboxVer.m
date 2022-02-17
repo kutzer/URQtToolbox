@@ -23,6 +23,7 @@ function varargout = URQtToolboxVer
 %               pause to *.Initialize to account for QtEXE startup
 %   27Jan2022 - Added joint limit checks
 %   27Jan2022 - Removed CB controller models from viable UR options
+%   17Feb2022 - Added *.QtDebug for testing with Roswell debug
 
 A.Name = 'Universal Robot Qt Toolbox';
 A.Version = '1.0.6';

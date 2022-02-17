@@ -630,8 +630,6 @@ classdef URQt < matlab.mixin.SetGet % Handle
             msg = sprintf('speedj([%.4f,%.4f,%.4f,%.4f,%.4f,%.4f], %.3f, %.3f)\n',...
                 dq(1),dq(2),dq(3),dq(4),dq(5),dq(6),a,t);
             
-            fprintf('%s\n',msg);
-            
             obj.sendMsg(msg);
             rsp = obj.receiveMsg(1,'uint8');
         end

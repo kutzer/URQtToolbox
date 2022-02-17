@@ -85,9 +85,53 @@ for i = 1:size(dq,2)
     pause(0.8*dt);
 end
 
-%% Define end-effector poses for each joint configuration
+% -------------------------------------------------------------------------
+% END COMPLETED WORK
+% -------------------------------------------------------------------------
+
+%% Create a more interesting path (task space)
+% Define end-effector poses for each joint configuration
 H0 = UR_fkin(ur.URmodel,q0);
 Hf = UR_fkin(ur.URmodel,qf);
+% Define task configurations for each pose
+v0 = pose2task(H0);
+vf = pose2task(Hf);
+
+% Fit continuous trajectory
+t = [t0,tf];
+v = [v0,vf];
+dv = zeros(6,2);
+ddv = zeros(6,2);
+pp = fitpp(t,v,t,dv,t,ddv);
+
+% Plot trajectory
+tt = linspace(t0,tf,1000);
+plotpp(pp,tt,2);
+
+%% Map trajectory to joint space
+dt = 0.05;
+t = t0:dt:tf;
+v = ppval(pp,t);
+
+q = q0;
+for i = 1:size(v,2)
+    H = task2pose(v(:,i));
+    q_all = UR_ikin(ur.URmodel,H);
+    
+    % Find closest configuration to q0
+    d = zeros(1,size(q_all,2));
+    for j = 1:size(q_all,2)
+        d(j) = norm(q_all - q(:,end),inf);
+    end
+    idx = find(d == min(d));
+    q(:,end+1) = q_all(:,idx(1));
+end
+
+figure;
+axes; hold on
+for i = 1:size(q,1)
+    plot(t,q(i,:));
+end
 
 %% Define internal function(s)
 function v = pose2task(H)

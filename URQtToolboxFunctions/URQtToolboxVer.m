@@ -26,9 +26,9 @@ function varargout = URQtToolboxVer
 %   17Feb2022 - Added *.QtDebug for testing with Roswell debug
 
 A.Name = 'Universal Robot Qt Toolbox';
-A.Version = '1.0.6';
+A.Version = '1.0.7';
 A.Release = '(R2021a)';
-A.Date = '27-Jan-2022';
+A.Date = '17-Feb-2022';
 A.URLVer = 1;
 
 msg{1} = sprintf('MATLAB %s Version: %s %s',A.Name, A.Version, A.Release);

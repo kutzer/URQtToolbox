@@ -88,7 +88,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   *MoveTime     - Movement time (s)
     %   Gain          - proportional gain for following target position,
     %                   range [100,2000]
-    %   LookAheadTime - time [S], range [0.03,0.2] smoothens the trajectory
+    %   BlockingTime  - time (s), time where a specified command is
+    %                   controlling the robot
+    %   LookAheadTime - time (s), range [0.03,0.2] smoothens the trajectory
     %                   with this lookahead time
     %
     % -Frame Definitions
@@ -138,6 +140,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   06Oct2021 - Updated if statements for JointVel, TaskVel, and
     %               TaskAcc to match true peak values
     %   06Oct2021 - Updated to add 2-second pause in Initialize
+    %   17Feb2022 - Added ServoJ and SpeedJ methods
+    %   24Feb2022 - Added FlushBuffer method
     
     % --------------------------------------------------------------------
     % General properties
@@ -210,7 +214,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     properties(GetAccess='public', SetAccess='private', Hidden=true)
         QtPath        % Path of Qt executable
         QtEXE         % Name of Qt executable
-        Joints_Old    % Previous joint configuration (used with Undo)
+        JointHistory  % Previous joint configuration (used with Undo)
     end
     
     % --------------------------------------------------------------------
@@ -589,14 +593,31 @@ classdef URQt < matlab.mixin.SetGet % Handle
         
         function Undo(obj)
             % Undo the previous move of the UR
-            alljoints = obj.Joints_Old;
+            alljoints = obj.JointHistory;
             if ~isempty(alljoints)
+                % Get current move type
+                moveType = obj.MoveType;
+                % Switch to linear joint movement
+                obj.MoveType = 'LinearJoint';
+                % Move to previous joint configuration
                 obj.Joints = alljoints(:,end);
+                % Remove previous joint configuration
                 alljoints(:,end) = [];
-                obj.Joints_Old = alljoints;
+                % Update configuration history
+                obj.JointHistory = alljoints;
+                % Set move type to current move type
+                obj.MoveType = moveType;
             end
         end
         
+        function FlushBuffer(obj)
+            % Flush the  TCP Client buffer
+            fprintf('Flushing TCP Client buffer.\n');
+            fprintf('Reading all data from TCP Client...');
+            msg = read(obj.Client);
+            fprintf('SUCCESS\n');
+            disp(msg);
+        end
     end % end methods
     
     % --------------------------------------------------------------------
@@ -604,6 +625,22 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % --------------------------------------------------------------------
     methods(Access='public')
         function ServoJ(obj,q)
+            % SERVOJ runs the URScript servoj command using a specified
+            % joint configuration.
+            %   obj.SeroJ(q)
+            %
+            %   Input(s)
+            %       q - 6-element joint configuration in radians
+            %
+            %   Applicable properties:
+            %       obj.Gain          - proportional gain for following  
+            %                           target position, range [100,2000]
+            %       obj.BlockTime     - time (s) where the command is 
+            %                           controlling robot 
+            %       obj.LookAheadTime - time (s), range [0.03,0.2] 
+            %                           smoothens the trajectory with this
+            %                           lookahead time
+            
             % TODO - check joint limits
             
             % Get necessary properties
@@ -621,6 +658,19 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
 
         function SpeedJ(obj,dq)
+            % SPEEDJ runs the URScript speedj command using a specified
+            % joint velocity vector array
+            %   obj.SpeedJ(dq)
+            %
+            %   Input(s)
+            %       dq - 6-element joint velocity in radians/sec
+            %
+            %   Applicable properties:
+            %       obj.JointAcc - maximum joint acceleration [rad/s^2] 
+            %                      (of leading axis)
+            %       obj.BlockTime - time (s) where the command is 
+            %                       controlling robot 
+            
             % TODO - check velocity limits
             
             % Get necessary properties
@@ -733,6 +783,17 @@ classdef URQt < matlab.mixin.SetGet % Handle
             H(1:3,1:3) = R;
             H(1:3,4) = d;
             pose = H;
+        end
+        
+        function addJointHistory(obj)
+            % Add element to joint history
+            jointsAll = obj.JointHistory;
+            % Get current joint configuration
+            q = obj.Joints;
+            % Append joint configuration
+            jointsAll(:,end+1) = q;
+            % Update joint history
+            obj.JointHistory = jointsAll;
         end
     end
     
@@ -952,6 +1013,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Wait for move
             if obj.WaitOn
                 obj.WaitForMove;
+                obj.addJointHistory;
             end
         end
         
@@ -1199,14 +1261,14 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.FrameT = frameT;
         end
         
-        function set.Joints_Old(obj,allJoints)
+        function set.JointHistory(obj,allJoints)
             % Set the history for undo method
             n = 50; % Limit size of history
             % alljoints(:,end+1) = joints;
             if size(allJoints,2) > 50
                 allJoints(:,1) = [];
             end
-            obj.Joints_Old = allJoints;
+            obj.JointHistory = allJoints;
         end
         
         
@@ -1247,17 +1309,17 @@ str = [];
 for i = 1:numel(joints)
     if tf_min(i)
         str = sprintf('\tJoint %d:\n',str,i);
-        str = sprintf('%s\t\tValue Returned: %f\n',str,joints(i));
-        str = sprintf('%s\t\tLower Limit:    %f\n',str,q_lims(i,1));
+        str = sprintf('%s\t\tCurrent Value: %f\n',str,joints(i));
+        str = sprintf('%s\t\t  Lower Limit: %f\n',str,q_lims(i,1));
     end
     if tf_max(i)
         str = sprintf('%s\tJoint %d:\n',str,i);
-        str = sprintf('%s\t\tValue Returned: %f\n',str,joints(i));
-        str = sprintf('%s\t\tUpper Limit:    %f\n',str,q_lims(i,2));
+        str = sprintf('%s\t\tCurrent Value: %f\n',str,joints(i));
+        str = sprintf('%s\t\t  Upper Limit: %f\n',str,q_lims(i,2));
     end
     if tf_nan(i)
         str = sprintf('%s\tJoint %d:\n',str,i);
-        str = sprintf('%s\t\tValue Returned: %f (Not a Number)\n',str,joints(i));
+        str = sprintf('%s\t\tCurrent Value: %f (Not a Number)\n',str,joints(i));
     end
 end
 end

@@ -19,84 +19,6 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %       clear ur
     %       ur = URQt('UR3e');
     %
-    % URQt Methods
-    %   Initialize   - Initialize the URQt object.
-    %   isMoving     - Determine whether the UR is currently moving.
-    %   isGripMoving - Determine whether Robotiq gripper is moving.
-    %   WaitForMove  - Wait until UR completes specified movement.
-    %   WaitForGrip  - Wait until Robotiq gripper finishes movement.
-    %   Home         - Move URQt to home joint configuration.
-    %   Stow         - Move URQt to stow joint configuration.
-    %   Zero         - Move URQt to zero joint configuration.
-    %   *Undo        - Return URQt to previous joint configuration.
-    %   get          - Query properties of the URQt object.
-    %   set          - Update properties of the URQt object.
-    %   delete       - Delete the URQt object and all attributes.
-    %
-    % URQt Methods (URScript Programming Commands)
-    % - See "URScript Programming Language" v5.9
-    %   ServoJ      - Sends a servoj command to the controller
-    %   SpeedJ      - Sends a speedj command to the controller
-    %
-    % URQt Properties
-    % -Qt Connection
-    %   IP          - String containing IP address for Qt connection
-    %   Port        - Integer specifying port for Qt connection
-    %   Client      - TCP client object for Qt connection
-    %
-    % -Universal Robot Model
-    %   URmodel     - string argument defining model of Universal Robot
-    %
-    % -DH Table
-    %   DHtable     - nx4 array defining the DH table of the Universal
-    %                 Robot
-    %
-    % -Joint Values
-    %   Joints      - 1x6 array containing joint values (radians)
-    %   Joint1      - scalar value containing joint 1 (radians)
-    %   Joint2      - scalar value containing joint 2 (radians)
-    %   Joint3      - scalar value containing joint 3 (radians)
-    %   Joint4      - scalar value containing joint 4 (radians)
-    %   Joint5      - scalar value containing joint 5 (radians)
-    %   Joint6      - scalar value containing joint 6 (radians)
-    %
-    % -End-effector pose
-    %   Pose        - 4x4 rigid body transform defining the end-effector
-    %                 pose relative to the world frame (linear units are
-    %                 defined in millimeters)
-    %   Task        - 1x6 array of [x,y,z,r1,r2,r3] matching the task
-    %                 variables used by UR with the exception of linear
-    %                 units (x,y,z) that are specified in millimeters
-    %
-    % -Tool pose
-    %   *ToolPose   - 4x4 rigid body transform defining the tool pose
-    %                 relative to the world frame (linear units are defined
-    %                 in millimeters)
-    %   *ToolTask   - 1x6 array of [x,y,z,r1,r2,r3] matching the task
-    %                 variables used by UR with the exception of linear
-    %                 units (x,y,z) that are specified in millimeters
-    %
-    % -Movement Parameters
-    %   WaitOn        - Binary that automatically induces WaitForMove and
-    %                   WaitForGrip when set to true
-    %   MoveType      - String describing move type (LinearTask or LinearJoint)
-    %   JointAcc      - Joint acceleration of leading axis (rad/s^2)
-    %   JointVel      - Joint speed of leading axis (rad/s)
-    %   TaskAcc       - Task acceleration (mm/s^2)
-    %   TaskVel       - Task speed (mm/s)
-    %   BlendRadius   - Blend radius between movements (mm)
-    %   *MoveTime     - Movement time (s)
-    %   Gain          - proportional gain for following target position,
-    %                   range [100,2000]
-    %   BlockingTime  - time (s), time where a specified command is
-    %                   controlling the robot
-    %   LookAheadTime - time (s), range [0.03,0.2] smoothens the trajectory
-    %                   with this lookahead time
-    %
-    % -Frame Definitions
-    %   *FrameT     - Tool Frame (transformation relative to the
-    %                 End-effector Frame)
-    %
     % Example:
     %       % Create and initialize hardware (WaitOn = true [DEFAULT]) ---
     %       ur3e = URQt('UR3e');  % Create URQt object & designate UR3e
@@ -153,8 +75,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
     end
     
     properties(GetAccess='public', SetAccess='public')
-        Timeout     % Allowed time for TCP client to complete operations (s)
-        ConnectTimeout   % Allowed time to connect to remove host (s)
+        Timeout         % Allowed time for TCP client to complete operations (s)
+        ConnectTimeout  % Allowed time to connect to remove host (s)
     end
     
     properties(GetAccess='public', SetAccess='private')
@@ -162,11 +84,11 @@ classdef URQt < matlab.mixin.SetGet % Handle
     end
     
     properties(GetAccess='public', SetAccess='public')
-        Joints      % 1x6 array containing joint values (radians)
+        Joints      % 6x1 array containing joint values (radians)
         Pose        % 4x4 homogeneous transform representing the end-effector pose relative to the world frame
-        Task        % 1x6 array containing end-effector pose in task space
+        Task        % 6x1 array containing end-effector pose in task space
         ToolPose    % 4x4 homogeneous transform representing the tool pose relative to the world frame
-        ToolTask    % 1x6 array containing tool pose in task space
+        ToolTask    % 6x1 array containing tool pose in task space
         GripPosition    % scalar value for gripper position (mm)
         GripSpeed       % scalar value for gripper speed (percent)
         GripForce       % scalar value for gripper force (percent)
@@ -185,6 +107,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
         BlockingTime  % Used with ServoJ & SpeedJ methods
         LookAheadTime % Used with ServoJ method
     end
+    
     properties(GetAccess='public', SetAccess='private')
         Jacobian    % Jacobian associated with robot
         DHtable     % DH table associated with robot
@@ -443,9 +366,10 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.Gain = 100;             % proportional gain, Used with ServoJ method
             obj.BlockingTime = 0.05;    % s, Used with ServoJ & SpeedJ methods
             obj.LookAheadTime = 0.1;    % s, Used with ServoJ method
-            [q_lims,dq_lims] = UR_jlims(obj.URmodel);
+            [q_lims,dq_lims,ddq_lims] = UR_jlims(obj.URmodel);
             obj.JointPositionLimits = q_lims;
             obj.JointVelocityLimits = dq_lims;
+            obj.JointAccelerationLimits = ddq_lims;
             
             % TODO - specify and use terminator
             % TODO - specify terminator callback function

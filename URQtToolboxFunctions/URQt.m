@@ -49,9 +49,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %       % ------------------------------------------------------------
     %
     % See also
-    %   URQtToolboxUpdate URQtToolboxVer
+    %   URQtToolboxUpdate URQtToolboxVer UR_*
     %
-    %   M. Kutzer 26Mar2021, USNA
+    %   M. Kutzer, 26Mar2021, USNA
     
     % Updates
     %   26Aug2021 - Corrected get GripForce, converted GripForce and
@@ -64,6 +64,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   06Oct2021 - Updated to add 2-second pause in Initialize
     %   17Feb2022 - Added ServoJ and SpeedJ methods
     %   24Feb2022 - Added FlushBuffer method
+    %   03Mar2022 - Fixed acceleration limit
     
     % --------------------------------------------------------------------
     % General properties
@@ -102,10 +103,10 @@ classdef URQt < matlab.mixin.SetGet % Handle
         TaskAcc     % Task acceleration (mm/s^2)
         TaskVel     % Task speed (mm/s)
         BlendRadius % Blend radius between movements (mm)
-        %MoveTime   % Movement time (s)
         Gain          % Used with ServoJ method
         BlockingTime  % Used with ServoJ & SpeedJ methods
         LookAheadTime % Used with ServoJ method
+        %MoveTime   % Movement time (s)
     end
     
     properties(GetAccess='public', SetAccess='private')
@@ -120,6 +121,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     properties(GetAccess='public', SetAccess='private')
         JointPositionLimits % Joint position limits (radians)
         JointVelocityLimits % Joint velocity limits (radians/sec)
+        JointAccelerationLimits % Joint acceleration limits (radians/sec^2)
     end % end properties
     
     properties(GetAccess='public', SetAccess='public', Hidden=true)
@@ -154,6 +156,24 @@ classdef URQt < matlab.mixin.SetGet % Handle
         
         % Create Object --------------------------------------------------
         function obj = URQt(varargin)
+            % URQt creates the URQt object and initializes the Qt interface
+            % to the e-Series controller (Rosette vX.X)
+            %   obj = URQt prompts the user to select the e-Series model
+            %
+            %   obj = URQt(urMod) allows the user to specify the e-Series
+            %   model using a character array
+            %
+            %   Input(s)
+            %       urMod - character array specifying e-Series model
+            %           urMod = 'UR3e'
+            %           urMod = 'UR5e'
+            %           urMod = 'UR10e'
+            %
+            %   Output(s)
+            %       obj - URQt object
+            %
+            %   M. Kutzer, , 26Mar2021, USNA
+            
             % Apply debug flag
             %   ENABLE DEBUG: obj = URQt('UR3e',true)
             if nargin > 1

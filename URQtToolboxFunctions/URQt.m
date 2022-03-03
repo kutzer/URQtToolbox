@@ -65,6 +65,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   17Feb2022 - Added ServoJ and SpeedJ methods
     %   24Feb2022 - Added FlushBuffer method
     %   03Mar2022 - Fixed acceleration limit
+    %   03Mar2022 - Major revision to documentation
+    %   03Mar2022 - Updated appendJointHistory usage
     
     % --------------------------------------------------------------------
     % General properties
@@ -110,8 +112,22 @@ classdef URQt < matlab.mixin.SetGet % Handle
     end
     
     properties(GetAccess='public', SetAccess='private')
-        Jacobian    % Jacobian associated with robot
-        DHtable     % DH table associated with robot
+        Jacobian_o % Base frame referenced Jacobian for current joint configuration [JTran; JRot]
+        Jacobian_e % End-effector referenced Jacobian for current joint configuration [JTran; JRot]
+        Jacobian_t % Tool frame referenced Jacobian for current joint configuration [JTran; JRot]
+        Fkin_e     % Forward kinematics for current joint configuration (end-effector relative to base)
+        Fkin_t     % Forward kinematics for current joint configuration (tool frame relative to base)
+        DHtable    % DH table for current joint configuration (end-effector relative to base frame)
+    end % end properties
+    
+ 	properties(GetAccess='public', SetAccess='private', Hidden=true)
+        fcnJacobian_o % Anonymous base frame referenced Jacobian function [JTran; JRot]
+        fcnJacobian_e % Anonymous end-effector referenced Jacobian function [JTran; JRot]
+        fcnJacobian_t % Anonymous tool frame referenced Jacobian function [JTran; JRot]
+        fcnFkin_e     % Anonymous forward kinematics function (end-effector relative to base frame)
+        fcnDHtable    % Anonymous DH table function  (end-effector relative to base frame)
+        symJoints     % Symbolic joint configuration (used for defining/updating anonymous functions)
+        symFkin_e     % Symbolic forward kinematics (end-effector relative to base frame) 
     end % end properties
     
     properties(GetAccess='public', SetAccess='public')
@@ -172,7 +188,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             %   Output(s)
             %       obj - URQt object
             %
-            %   M. Kutzer, , 26Mar2021, USNA
+            %   M. Kutzer, 26Mar2021, USNA
             
             % Apply debug flag
             %   ENABLE DEBUG: obj = URQt('UR3e',true)
@@ -296,7 +312,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
         
         % Delete Object --------------------------------------------------
         function delete(obj)
-            % Object destructor
+            % DELETE delete the URQt object (object destructor)
             
             % Shutdown arm
             obj.ShutdownArm;
@@ -328,15 +344,51 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % --------------------------------------------------------------------
     methods(Access='public')
         function Initialize(obj,varargin)
-            % Initialize initializes a Universal Robot simulation
+            % INITIALIZE initializes the connection with the Qt executable,
+            % and initializes the UR e-Series manipulator
+            %   obj.Initialize
             %
-            % Initialize(obj)
+            %   obj.Initialize(IP) specify the IP address, use default port
             %
-            % Initialize(obj,URmodel)
+            %   obj.Initialize([],Port) specify the port, use default IP
             %
-            % Initialize(obj,URmodel,IP)
+            %   obj.Initialize(IP,Port) specify the IP address and port
             %
-            % Initialize(obj,URmodel,IP,Port)
+            %   Input(s)
+            %       IP   - character array specifying IP address of the TCP
+            %              Client connection to the Qt executable (default  
+            %              value '127.0.0.1')
+            %       Port - integer value specifying the port of the TCP
+            %              Client connection to the Qt executable (default
+            %              value 8897)
+            
+            % Set default value(s)
+            IP_val = '127.0.0.1';
+            Port_val = 8897;
+            IP_in = [];
+            Port_in = [];
+            
+            % Parse Input(s)
+            if numel(varargin) >= 2
+                IP_in = varargin{1};
+            end
+            
+            if numel(varargin) >= 3
+                Port_in = varargin{2};
+            end
+            
+            % TODO - Validate IP address and port
+            
+            % Change default(s)
+            if ~isempty(IP_in)
+                fprintf('Switching IP address from %s to %s\n',IP_val,IP_in);
+                IP_val = IP_in;
+            end
+            
+            if ~isempty(Port_in)
+                fprintf('Switching Port from %d to %d\n',Port_val,Port_in);
+                Port_val = Port_in;
+            end
             
             % Wait for QtEXE to start fully
             if ~obj.QtDebug
@@ -368,10 +420,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 % No TCP client exists
             end
             
-            % Initialize IP and Port
-            % TODO - allow user to specify IP and Port
-            obj.IP = '127.0.0.1';
-            obj.Port = 8897;
+            % Initialize TCP/IP Client settings
+            obj.IP = IP_val;
+            obj.Port = Port_val;
             obj.Timeout = 5;
             obj.ConnectTimeout = 10;
             
@@ -390,6 +441,26 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.JointPositionLimits = q_lims;
             obj.JointVelocityLimits = dq_lims;
             obj.JointAccelerationLimits = ddq_lims;
+            
+            % -> Forward Kinematics/DH anonymous functions
+            obj.fcnFkin_e = @(q)UR_fkin(obj.URmodel,q);
+            obj.fcnDHtable = @(q)UR_DHtable(obj.URmodel,q);
+            % -> Symbolic joint configuration
+            syms q1 q2 q3 q4 q5 q6
+            obj.symJoints = [q1; q2; q3; q4; q5; q6];
+            % -> Symbolic forward kinematics
+            obj.symFkin_e = obj.fcnFkin_e(obj.symJoints);
+            % -> Jacobians
+            obj.fcnJacobian_o = ...
+                calculateJacobian(obj.symJoints,obj.symFkin_e,false,...
+                'Reference','World','Order','TranslationRotation');
+            obj.fcnJacobian_e = ...
+                calculateJacobian(obj.symJoints,obj.symFkin_e,false,...
+                'Reference','Body','Order','TranslationRotation');
+            % -> Tool Frame offset
+            %    NOTE: obj.fcnJacobian_t is set with FrameT (bad practice)
+            obj.FrameT = eye(4);
+            
             
             % TODO - specify and use terminator
             % TODO - specify terminator callback function
@@ -412,6 +483,12 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % --------------------------------------------------------------------
     methods(Access='public')
         function InitializeArm(obj)
+            % INITIALIZEARM initializes the UR e-Series and Robotiq Hand-E
+            % gripper using the Qt command "btnarm". 
+            
+            % TODO - Isolate "InitializeArm" from "InitializeGripper"
+            %   *This will require changes to the Qt code*
+            
             fprintf('Initializing arm...');
             msg = 'btnarm';
             obj.sendMsg(msg);
@@ -449,6 +526,11 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
         
         function ShutdownArm(obj)
+            % SHUTDOWNARM powers off the UR e-Series robot.
+            %
+            %   NOTE: This method is disabled because shutting down the arm
+            %         occurs every time the destructor is run
+            
             %{
             fprintf('Shutting down arm...');
             msg = 'shutdown';
@@ -456,10 +538,21 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.sendMsg(msg);
             fprintf('COMMAND SENT\n');
             %}
-            fprintf('ShutdownArm: This method is not fully implemented.\n');
+            fprintf('obj.ShutdownArm: This method is disabled.\n');
         end
         
         function tf = isMoving(obj)
+            % ISMOVING checks to see if the UR e-Series manipulator is
+            % currently moving
+            %   tf = obj.isMoving
+            %
+            %   Output(s)
+            %       tf - binary value describing whether the manipulator is
+            %            moving
+            %
+            %           tf = true if the manipulator is moving,
+            %           tf = false if the manipulator is not moving
+            
             % Check if UR is currently moving
             msg = 'getarmdone';
             obj.sendMsg(msg);
@@ -474,6 +567,17 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
         
         function tf = isGripMoving(obj)
+            % ISGRIPMOVING checks to see if the Robotiq Hand-E gripper is 
+            % currently moving
+            %   tf = obj.isGripMoving
+            %
+            %   Output(s)
+            %       tf - binary value describing whether the gripper is
+            %            moving
+            %
+            %           tf = true if the gripper is moving,
+            %           tf = false if the gripper is not moving
+            
             % Check if Robotiq is currently moving
             % TODO - This depends on a hard-coded pause that is clunky
             g0 = obj.GripPosition;
@@ -487,15 +591,24 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
         
         function WaitForMove(obj)
+            % WAITFORMOVE blocks MATLAB execution until a manipulator 
+            % configuration is achieved
+            
             % Wait for arm to move
             fprintf('Waiting for UR move');
             while obj.isMoving
                 fprintf('.');
             end
             fprintf('\n');
+            
+            % Add joint configuration to the joint history
+            obj.addJointHistory;
         end
         
         function WaitForGrip(obj)
+            % WAITFORGRIP blocks MATLAB execution until a gripper position
+            % is achieved
+            
             % Wait for gripper to move
             fprintf('Waiting for Robotiq move');
             while obj.isGripMoving
@@ -505,7 +618,11 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
         
         function Home(obj)
-            % Move the UR simulation to the home configuration
+            % HOME moves the UR to the home configuration
+            %
+            %   NOTE: This method overrides a obj.WaitOn = 0 property value
+            %         and imposes a *temporary* obj.WaitOn = 1
+            
             % TODO - confirm home position of UR3 and UR5
             joints = [...
                 0.00;...
@@ -515,11 +632,21 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 0.00;...
                 0.00];
             obj.Joints = joints;
+            
+            if ~obj.WaitOn
+                obj.WaitForMove;
+            end
         end
         
         function Stow(obj)
-            % Move the UR simulation to the stow configuration
+            % STOW moves the UR to the stow configuration
+            %
+            %   NOTE: This method overrides a obj.WaitOn = 0 property value
+            %         and imposes a *temporary* obj.WaitOn = 1
+            
             % TODO - confirm stow position of UR3 and UR5
+            
+            % Define "stow" joint configuration
             joints = [...
                 -1.570782,...
                 -3.141604,...
@@ -527,34 +654,78 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 -4.223715,...
                 0.000023,...
                 4.712387];
+            
+            % Set joint configuration
             obj.Joints = joints;
+            
+            % Wait for move
+            if ~obj.WaitOn
+                obj.WaitForMove;
+            end
         end
         
         function Zero(obj)
-            % Move the UR simulation to the zero configuration
-            obj.Joints = zeros(6,1);
+            % ZERO Move the UR to the zero configuration
+            %
+            %   NOTE: This method overrides a obj.WaitOn = 0 property value
+            %         and imposes a *temporary* obj.WaitOn = 1.
+            
+            % Define "zero" joint configuration
+            joints = zeros(6,1);
+            
+            % Set joint configuration
+            obj.Joints = joints;
+            
+            % Wait for move
+            if ~obj.WaitOn
+                obj.WaitForMove;
+            end
         end
         
         function Undo(obj)
-            % Undo the previous move of the UR
+            % UNDO moves the UR to the previous joint configuration
+            %
+            %   NOTES: 
+            %   (1) This method overrides a obj.WaitOn = 0 property value
+            %       and imposes a *temporary* obj.WaitOn = 1.
+            %   (2) This method is only retrieves previous joint
+            %       configurations achieved using the obj.WaitForMove 
+            %       method which is run when obj.WaitOn = 1;
+            
             alljoints = obj.JointHistory;
             if ~isempty(alljoints)
                 % Get current move type
                 moveType = obj.MoveType;
+                
                 % Switch to linear joint movement
                 obj.MoveType = 'LinearJoint';
+                
                 % Move to previous joint configuration
                 obj.Joints = alljoints(:,end);
+                
+                % Wait for move
+                if ~obj.WaitOn
+                    obj.WaitForMove;
+                end
+                
                 % Remove previous joint configuration
                 alljoints(:,end) = [];
+                
                 % Update configuration history
                 obj.JointHistory = alljoints;
+                
                 % Set move type to current move type
                 obj.MoveType = moveType;
             end
         end
         
         function FlushBuffer(obj)
+            % FLUSHBUFFER clears all existing contents from the TCP Client
+            % Buffer.
+            %
+            %   NOTE: This method should be used if/when the robot appears
+            %         to give "bad" joint, task, or pose information
+            
             % Flush the  TCP Client buffer
             fprintf('Flushing TCP Client buffer.\n');
             fprintf('Reading all data from TCP Client...');
@@ -584,6 +755,15 @@ classdef URQt < matlab.mixin.SetGet % Handle
             %       obj.LookAheadTime - time (s), range [0.03,0.2] 
             %                           smoothens the trajectory with this
             %                           lookahead time
+            %
+            %   NOTE: Adjusting the followin parameters may also impact
+            %         performance
+            %       (1) obj.JointAcc - maximum joint acceleration of
+            %                          leading axis (rad/s^2)
+            %       (2) obj.JointVel - maximum joint speed of leading axis
+            %                          (rad/s)
+            %
+            %   M. Kutzer, 24Feb2022, USNA
             
             % TODO - check joint limits
             
@@ -610,10 +790,12 @@ classdef URQt < matlab.mixin.SetGet % Handle
             %       dq - 6-element joint velocity in radians/sec
             %
             %   Applicable properties:
-            %       obj.JointAcc - maximum joint acceleration [rad/s^2] 
-            %                      (of leading axis)
+            %       obj.JointAcc - maximum joint acceleration of
+            %                      leading axis (rad/s^2)
             %       obj.BlockTime - time (s) where the command is 
             %                       controlling robot 
+            %
+            %   M. Kutzer, 24Feb2022, USNA
             
             % TODO - check velocity limits
             
@@ -634,7 +816,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % --------------------------------------------------------------------
     methods(Access='private')
         function tf = isQtRunning(obj)
-            % Check if server is running
+            % ISQTRUNNING checks if the Qt executable is running using the
+            % "tasklist" system command in Windows
+            
             str = sprintf('tasklist /fi "imagename eq %s"',obj.QtEXE);
             [~,cmdout] = system(str);
             % If the server is *not* running, we expect response resembling
@@ -646,7 +830,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
         
         function tf = killQt(obj)
-            % Kill Qt process
+            % KILLQT "kills" instance(s) of the Qt executable using the 
+            % "taskkill /IM" system command in Windows
+            
             str = sprintf('taskkill /IM "%s" /F',obj.QtEXE);
             [~,cmdout] = system(str);
             %sprintf('%s/n',cmdout);
@@ -654,7 +840,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
         
         function tf = existQt(obj)
-            % Check if server exists
+            % EXISTQT checks to see if the Qt executable executable exists 
+            % in the existing MATLAB path
+            
             str = fullfile(obj.QtPath,obj.QtEXE);
             tf = false;
             if exist(str,'file') == 2
@@ -663,22 +851,31 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
         
         function startQt(obj)
-            % Start the server
+            % START Start the Qt executable using the "start" system
+            % command in Windows
+            
             fstr = fullfile(obj.QtPath,obj.QtEXE);
             str = sprintf('start /min "" "%s" ',fstr);
             system(str);
         end
         
         function tf = stopQt(obj)
-            % Stop the server
+            % STOPQT "kills" instance(s) of the Qt executable using the 
+            % "taskkill /im" system command in Windows
             str = sprintf('taskkill /im "%s"',obj.QtEXE);
             [~,cmdout] = system(str);
             tf = contains(cmdout,'SUCCESS');
         end
         
         function sendMsg(obj,varargin)
-            % Send message to Qt server
-            % obj.sendMsg(msg)
+            % SENDMSG writes a specified TCP Client message to the TCP
+            % Server running in the Qt executable
+            %   obj.sendMsg(msg)
+            %
+            %   Input(s)
+            %       msg - 1xN character array specifying the desired
+            %             message
+            
             msg = varargin{1};
             s = uint8(msg);
             write(obj.Client,s);
@@ -696,46 +893,162 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
         
         function msg = receiveMsg(obj,varargin)
-            % Receive message from Qt server
-            % obj.receiveMsg(6,'double')
+            % RECEIVEMSG receives a message message from the TCP client 
+            % connected to the TCP Server running in the Qt executable
+            %   receiveMsg(dataSize,dataType)
+            %
+            %   Input(s)
+            %       dataSize - positive integer value specifying the number 
+            %                  values associated with the message
+            %       dataType - 1xN character array specifying the type of
+            %                  data expected
+            %
+            %   Example(s)
+            %       % Read six double precision floating point values
+            %       obj.receiveMsg(6,'double')
+            %
+            %   NOTE(s)
+            %   (1) The waring recommendation does not include checking
+            %       that the Rosette Vx.x network settings match that of
+            %       the robot. To do this:
+            %       (a) Confirm that Rosette Vx.x has the same static IP as 
+            %           the robot:
+            %           Rosette Vx.x
+            %               Network
+            %                   Net Address
+            %                       Robot Net URL
+            %       (b) Confirm that the static IP settings associated with
+            %           the network card connected to the robot are correct
+            %           Example:
+            %               Robot
+            %                   IP Address: 10.0.0.2
+            %                   Subnet Mask: 255.255.255.0
+            %                   Default Gateway: 10.0.0.1
+            %                   Preferred/Alternative DNS Server: 8.8.8.8
+            %               Network Card
+            %                   IP Address: 10.0.0.1
+            %                   Subnet Mask: 255.255.255.0
+            %                   Default Gateway: 10.0.0.2
+            %                   Preferred/Alternative DNS Server: 8.8.8.8
+            
+            % TODO - check nargin, and variables
+            
+            % Parse inputs
             dSize = varargin{1};
             dType = varargin{2};
-            % TODO - check nargin, and variables
+            
+            % Read message
             try
                 msg = read(obj.Client,dSize,dType);
             catch
-                %warning('Timeout reached, no message received.');
+                % We should not get here unless:
+                %   (1) The URQt object is not fully initialized
+                %   (2) The TCP Client has unexpectedly closed
+                %   (3) The user is not actually connected to the robot
+                fprintf('\n');
+                warning([...
+                    'Unable to execute:\n',...
+                    '\tmsg = read(obj.Client,%d,''%s'')\n\n',...
+                    'Before proceeding, check the following:\n',...
+                    '\t(1) Have you properly defined *and* initialized your URQt object?\n',...
+                    '\t(2) Are you actually connected to the UR e-Series?\n\n',...
+                    'Operational notes:\n',...
+                    '\t(a) If your UR e-Series manipulator is already initialized (note the green \n',...
+                    '\t    circle "Normal" in the lower left of the teach pendant), you will get\n',...
+                    '\t    this message during initialization (e.g. "ur.Initialize")\n',...
+                    '\t(b) To confirm that the arm is operational, query the joint configuration\n',...
+                    '\t    and try simple moves (e.g. "ur.Zero" and "ur.Home"). If this works as\n',...
+                    '\t    expected, your arm is fully operational!\n\n',...
+                    'Recommended fix:\n',...
+                    '\t(a) Confirm that your UR e-Series robot is powered on and in "Remote" mode,\n',...
+                    '\t(b) Confirm that your UR e-Series robot is in the "Power off" state,\n',...
+                    '\t(c) Clear your URQt object (e.g. "clear ur"),\n',...
+                    '\t(d) Create a new URQt object (e.g. "ur = URQt;"), and\n',...
+                    '\t(e) Initialize the new URQt object (e.g. "ur.Initialize;")\n\n',...
+                    'See "help obj.receiveMsg" for more information.'],...
+                    dSize,dType);
+
+                % Return NaN value
                 msg = nan;
             end
         end
         
         function task = pose2task(obj,pose)
-            % Convert pose to task space
-            H = pose;
-            R = H(1:3,1:3);
-            d = H(1:3,4);
-            r = rotationMatrixToVector(R);
-            task = [reshape(d,1,3),reshape(-r,1,3)];
+            % POSE2TASK converts a pose (element of SE(3)) to its 
+            % corresponding task space representation [k; d]
+            %   task = obj.pose2task(pose)
+            %
+            %   Input(s)
+            %       pose - 4x4 array defining the end-effector pose 
+            %              relative to the base frame (must be a valid 
+            %              element of SE(3))
+            %
+            %   Output(s)
+            %       task - 6x1 array defining a task configuration
+            %
+            %       task = [d] (3-element translation parameterization)
+            %              [k] (3-element rotation parameterization)
+            
+            % TODO - check for valid element of SE(3)
+            
+            % Define pose
+            H_e2o = pose;
+            
+            % Isolate rotation and translation
+            R_e2o = H_e2o(1:3,1:3);
+            d_e2o = H_e2o(1:3,4);
+            
+            % Map rotation to rotation parameterization
+            k_e2o = -rotationMatrixToVector(R_e2o);
+            
+            % Package task configuration
+            task = [reshape(d_e2o,1,3),reshape(k_e2o,1,3)];
         end
         
         function pose = task2pose(obj,task)
-            % Convert task space to pose
-            d = task(1:3);
-            r = task(4:6);
-            R = rotationVectorToMatrix(-r);
-            H = eye(4);
-            H(1:3,1:3) = R;
-            H(1:3,4) = d;
-            pose = H;
+            % TASK2POSE converts a task configuration (6-element array) to 
+            % its corresponding pose (element of SE(3))
+            %   pose = obj.task2pose(task)
+            %
+            %   Input(s)
+            %       task - 6x1 array defining a task configuration
+            %
+            %       task = [d] (3-element translation parameterization)
+            %              [k] (3-element rotation parameterization)
+            %
+            %   Output(s)
+            %       pose - 4x4 array defining the end-effector pose
+            %              relative to the base frame (element of SE(3))
+            
+            % TODO - check task parameterization input
+            
+            % Isolate rotation and translation parameters
+            d_e2o = task(1:3);
+            k_e2o = task(4:6);
+            
+            % Map rotation parametization to rotation matrix
+            R_e2o = rotationVectorToMatrix(-k_e2o);
+            
+            % Package pose
+            H_e2o = eye(4);
+            H_e2o(1:3,1:3) = R_e2o;
+            H_e2o(1:3,4) = d_e2o;
+            pose = H_e2o;
         end
         
         function addJointHistory(obj)
+            % ADDJOINTHISTORY appends the current joint configuration to
+            % the JointHistory property for use with the "Undo" method.
+            
             % Add element to joint history
             jointsAll = obj.JointHistory;
+            
             % Get current joint configuration
             q = obj.Joints;
+            
             % Append joint configuration
             jointsAll(:,end+1) = q;
+            
             % Update joint history
             obj.JointHistory = jointsAll;
         end
@@ -894,7 +1207,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             
             if nnz(tf_min) > 0 || nnz(tf_max) > 0 || nnz(tf_nan)
                 strJlims  = fcnJointLimitsSTR(joints,q_lims,tf_min,tf_max,tf_nan);
-                strReinit = fcnReinitializeSTR(obj);
+                strReinit = fcnFlushBufferSTR(obj);
                 str = sprintf(...
                     ['The joint configuration returned from the ',...
                     'controller exceeds the robot joint limits:\n%s%s'],...
@@ -957,7 +1270,6 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Wait for move
             if obj.WaitOn
                 obj.WaitForMove;
-                obj.addJointHistory;
             end
         end
         
@@ -1181,14 +1493,33 @@ classdef URQt < matlab.mixin.SetGet % Handle
         %            relative to the world frame
         function toolpose = get.ToolPose(obj)
             % Get the current tool pose of the simulation
-            pose = obj.Pose;
-            toolpose = pose * obj.FrameT;
+            H_e2o = obj.Pose;
+            H_t2e = obj.FrameT;
+            toolpose = H_e2o * H_t2e;
         end
         
         function set.ToolPose(obj,toolpose)
             % Set the current tool pose of the simulation
-            pose = toolpose * invSE(obj.FrameT);
-            obj.Pose = pose;
+            H_t2o = toolpose;
+            H_t2e = obj.FrameT;
+            H_e2o = H_t2o * invSE(H_t2e);
+            obj.Pose = H_e2o;
+        end
+        
+        % ToolTask - 6x1 task configuration for the tool frame relative to
+        %            the base frame [tran; rot]
+        function tooltask = get.ToolTask(obj)
+            % Get tool pose
+            H_t2o = obj.ToolPose;
+            % Convert to task space
+            tooltask = obj.pose2task(H_t2o);
+        end
+        
+        function set.ToolTask(obj,tooltask)
+            % Convert to tool pose
+            H_t2o = obj.task2pose(tooltask);
+            % Update tool pose
+            obj.ToolPose = H_t2o;
         end
         
         % FrameT - Tool Frame (transformation relative to the End-effector
@@ -1203,6 +1534,12 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Set the transformation relating the tool frame to the
             % end-effector frame
             obj.FrameT = frameT;
+            
+            % Update body-fixed tool frame Jacobian
+            symFkin_t = obj.symFkin_e*frameT;
+            obj.fcnJacobian_t = ...
+                calculateJacobian(obj.symJoints,symFkin_t,false,...
+                'Reference','Body','Order','TranslationRotation');
         end
         
         function set.JointHistory(obj,allJoints)
@@ -1223,36 +1560,64 @@ classdef URQt < matlab.mixin.SetGet % Handle
             urmodel = obj.URmodel;
         end
         
+        % Jacobian_o - Base frame referenced Jacobian for current joint configuration [JTran; JRot]
+        function jacobian_o = get.Jacobian_o(obj)
+            q = obj.Joints;
+            jacobian_o = obj.fcnJacobian_o(q);
+        end
+        
+        % Jacobian_e - End-effector referenced Jacobian for current joint configuration [JTran; JRot]
+        function jacobian_e = get.Jacobian_e(obj)
+            q = obj.Joints;
+            jacobian_e = obj.fcnJacobian_e(q);
+        end
+        
+        % Jacobian_t - Tool frame referenced Jacobian for current joint configuration [JTran; JRot]
+        function jacobian_t = get.Jacobian_t(obj)
+            q = obj.Joints;
+            jacobian_t = obj.fcnJacobian_t(q);
+        end
+        
+        % Fkin_e - Forward kinematics for current joint configuration (end-effector relative to base)
+        function fkin_e = get.Fkin_e(obj)
+            q = obj.Joints;
+            fkin_e = obj.fcnFkin_e(q);
+        end
+        
+        % Fkin_t - Forward kinematics for current joint configuration (end-effector relative to base)
+        function fkin_t = get.Fkin_t(obj)
+            q = obj.Joints;
+            fkin_t = obj.fcnFkin_t(q);
+        end
+        
         % DHtable - DH table associated with robot
         % TODO - allow user to calibrate robot to correct DH table
         function dhtable = get.DHtable(obj)
             q = obj.Joints;
-            urMod = obj.URmodel;
-            dhtable = UR_DHtable(urMod,q);
+            dhtable = obj.fcnDHtable(q);
         end
-        
-        % Jacobian - Jacobian associated with robot
-        function J = get.Jacobian(obj)
-            q = obj.Joints;
-            urMod = obj.URmodel;
-            J = UR_Jacobian(urMod,q);
-        end
+
     end % end methods
 end % end classdef
 
 %% Internal functions
-function str = fcnReinitializeSTR(obj)
-str = sprintf('\nConsider re-initializing communications with the robot:\n');
-str = sprintf('%s\tclear ur\n',str);
-str = sprintf('%s\tur = URQt;\n',str);
-str = sprintf('%s\tur.Initialize(''%s'');',str,obj.URmodel);
+function str = fcnFlushBufferSTR(obj)
+str = sprintf('\nConsider flushing the URQt buffer:\n');
+str = sprintf('%s\tur.FlushBuffer\n',str);
 end
 
 function str = fcnJointLimitsSTR(joints,q_lims,tf_min,tf_max,tf_nan)
 str = [];
-for i = 1:numel(joints)
+
+nJnts = numel(joints);
+if nJnts ~= 6
+    str = sprintf('%s\tTotal values returned: %d, Total values expected: 6\n',nJnts);
+    return
+end
+
+for i = 1:nJnts
     if tf_min(i)
-        str = sprintf('\tJoint %d:\n',str,i);
+        str = sprintf('%s\tJoint %d:\n',str,i);
         str = sprintf('%s\t\tCurrent Value: %f\n',str,joints(i));
         str = sprintf('%s\t\t  Lower Limit: %f\n',str,q_lims(i,1));
     end

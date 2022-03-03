@@ -27,11 +27,13 @@ function varargout = URQtToolboxVer
 %   17Feb2022 - Added ServoJ and updated Roswell
 %   17Feb2022 - Added SpeedJ
 %   24Feb2022 - Added flush buffer, updated documentation
+%   03Feb2022 - Added proper Jacobians, updated documentation, enabled user
+%               select IP and port, and enabled tool frame capabilities
 
 A.Name = 'Universal Robot Qt Toolbox';
-A.Version = '1.0.9';
+A.Version = '1.1.0';
 A.Release = '(R2021a)';
-A.Date = '24-Feb-2022';
+A.Date = '03-Mar-2022';
 A.URLVer = 1;
 
 msg{1} = sprintf('MATLAB %s Version: %s %s',A.Name, A.Version, A.Release);

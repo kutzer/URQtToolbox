@@ -1,0 +1,8 @@
+Error using URQt/sendMsg (line 881)
+Invalid or deleted object.
+
+Error in URQt/get.Task (line 1369)
+            obj.sendMsg(msg);
+
+Error in URQt/get.Pose (line 1354)
+            task = obj.Task;

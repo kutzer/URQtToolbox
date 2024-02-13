@@ -67,6 +67,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   03Mar2022 - Fixed acceleration limit
     %   03Mar2022 - Major revision to documentation
     %   03Mar2022 - Updated appendJointHistory usage
+    %   13Feb2024 - Typo correction in joint velocity limits
     
     % --------------------------------------------------------------------
     % General properties
@@ -1151,7 +1152,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 jointVel = 0;
             end
             if jointVel > 2*pi
-                warning('Joint acceleration must be between 0 and 2*pi rad/sec. Setting to 2*pi rad/sec.');
+                warning('Joint velocity must be between 0 and 2*pi rad/sec. Setting to 2*pi rad/sec.');
                 jointVel = 2*pi;
             end
             obj.JointVel = jointVel;

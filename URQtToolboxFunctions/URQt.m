@@ -757,7 +757,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             %                           smoothens the trajectory with this
             %                           lookahead time
             %
-            %   NOTE: Adjusting the followin parameters may also impact
+            %   NOTE: Adjusting the following parameters may also impact
             %         performance
             %       (1) obj.JointAcc - maximum joint acceleration of
             %                          leading axis (rad/s^2)

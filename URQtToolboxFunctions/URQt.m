@@ -68,6 +68,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   03Mar2022 - Major revision to documentation
     %   03Mar2022 - Updated appendJointHistory usage
     %   13Feb2024 - Typo correction in joint velocity limits
+    %   30Jan2025 - Updated to include arm, gripper, and dashboard commands
     
     % --------------------------------------------------------------------
     % General properties
@@ -180,11 +181,14 @@ classdef URQt < matlab.mixin.SetGet % Handle
             %   obj = URQt(urMod) allows the user to specify the e-Series
             %   model using a character array
             %
+            %   obj = URQt(urMod,debug)
+            %
             %   Input(s)
             %       urMod - character array specifying e-Series model
             %           urMod = 'UR3e'
             %           urMod = 'UR5e'
             %           urMod = 'UR10e'
+            %       debug - logical scalar specifying debug status
             %
             %   Output(s)
             %       obj - URQt object
@@ -218,8 +222,15 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Define Qt executable path
             dName = 'urqt';
             fName = 'URQtSupport';
-            obj.QtPath = fullfile(matlabroot,'toolbox',dName,fName);
-            
+
+            if ~obj.QtDebug
+                obj.QtPath = fullfile(matlabroot,'toolbox',dName,fName);
+            else
+                obj.QtPath = [];%uigetdir(userpath,'Select Roswell "release" directory');
+            end
+
+            obj.QtPath = 'C:\Users\Robot\Documents\GitHub\URToolboxQtDevelopment\build-Roswell-Kutzer-v2\release';
+
             % Define Qt executable name
             obj.QtEXE = 'Roswell.exe';
             
@@ -737,6 +748,108 @@ classdef URQt < matlab.mixin.SetGet % Handle
     end % end methods
     
     % --------------------------------------------------------------------
+    % URScript Direct Messaging
+    % --------------------------------------------------------------------
+    methods(Access='public')
+        function msgOut = sendCmdArm(obj,msg)
+            % SENDCMDARM sends a URScript "arm" command
+            %   obj.sendCmdArm(msg)
+            %
+            %   Input(s)
+            %       msg - 1xN character array defining arm command
+            %
+            %   M. Kutzer, 30Jan2025, USNA
+            obj.sendMsg(sprintf('sendarmcmd%s',msg));
+            %{
+            msgOut = [];
+            waitForMsg = true;
+            while waitForMsg
+                msgTMP = read(obj.Client);
+                msgOut = [msgOut,msgTMP];
+
+                if numel(msgOut) > 1
+                    if msgOut(end) ~= uint8('$')
+                        waitForMsg = false;
+                    end
+                end
+            end
+            msgOut = obj.parseCmdResponse( char(msgOut) );
+            %}
+            obj.receiveMsg(1,'double');
+            msgOut = '';
+        end
+
+        function msgOut = sendCmdGripper(obj,msg)
+            % SENDCMDGRIPPER sends a URCap "gripper" command
+            %   obj.sendCmdGripper(msg)
+            %
+            %   Input(s)
+            %       msg - 1xN character array defining arm command
+            %
+            %   M. Kutzer, 30Jan2025, USNA
+            obj.sendMsg(sprintf('sendgripcmd%s',msg));
+
+            % Wait for response
+            while obj.Client.BytesAvailable < 2
+                % Wait ...
+                drawnow
+            end
+
+            msgOut = '';
+            waitForMsg = true;
+            while waitForMsg
+                msgTMP = obj.receiveMsg(obj.Client.BytesAvailable,'char');
+                msgOut = [msgOut,msgTMP];
+                if matches(msgOut(end),'$')
+                    waitForMsg = false;
+                end
+            end
+            msgOut = obj.parseCmdResponse( msgOut );
+        end
+
+        function msgOut = sendCmdDashboard(obj,msg)
+            % SENDCMDDASHBOARD sends a URScript "dashboard" command
+            %   obj.sendCmdDashboard(msg)
+            %
+            %   Input(s)
+            %       msg - 1xN character array defining arm command
+            %
+            %   M. Kutzer, 30Jan2025, USNA
+            obj.sendMsg(sprintf('senddashcmd%s',msg));
+
+            % Wait for response
+            while obj.Client.BytesAvailable < 2
+                % Wait ...
+                drawnow
+            end
+
+            msgOut = '';
+            waitForMsg = true;
+            while waitForMsg
+                msgTMP = obj.receiveMsg(obj.Client.BytesAvailable,'char');
+                msgOut = [msgOut,msgTMP];
+                if matches(msgOut(end),'$')
+                    waitForMsg = false;
+                end
+            end
+            msgOut = obj.parseCmdResponse( msgOut );
+        end
+    end
+
+    methods(Access='private')
+        function out = parseCmdResponse(~,msg)
+            expression = '\$(.*?)\$'; % Non-greedy match between $ symbols
+            tokens = regexp(msg, expression, 'tokens');
+
+            if ~isempty(tokens)
+                out = tokens{1}{1};
+            else
+                out = '';
+            end
+        end
+    end
+
+    % --------------------------------------------------------------------
     % URScript Programming Methods
     % --------------------------------------------------------------------
     methods(Access='public')
@@ -816,6 +929,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % Private Methods
     % --------------------------------------------------------------------
     methods(Access='private')
+    %methods(Access='public') % DEBUG
         function tf = isQtRunning(obj)
             % ISQTRUNNING checks if the Qt executable is running using the
             % "tasklist" system command in Windows

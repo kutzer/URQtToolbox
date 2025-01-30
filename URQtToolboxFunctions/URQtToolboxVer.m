@@ -32,9 +32,9 @@ function varargout = URQtToolboxVer
 %   13Feb2024 - Typo correction in URQt class
 
 A.Name = 'Universal Robot Qt Toolbox';
-A.Version = '1.1.1';
+A.Version = '1.1.2';
 A.Release = '(R2021a)';
-A.Date = '13-Feb-2024';
+A.Date = '30-Jan-2025';
 A.URLVer = 1;
 
 msg{1} = sprintf('MATLAB %s Version: %s %s',A.Name, A.Version, A.Release);

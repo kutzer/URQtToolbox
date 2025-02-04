@@ -229,8 +229,6 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 obj.QtPath = [];%uigetdir(userpath,'Select Roswell "release" directory');
             end
 
-            obj.QtPath = 'C:\Users\Robot\Documents\GitHub\URToolboxQtDevelopment\build-Roswell-Kutzer-v2\release';
-
             % Define Qt executable name
             obj.QtEXE = 'Roswell.exe';
             

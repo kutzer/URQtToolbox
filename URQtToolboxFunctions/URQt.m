@@ -217,15 +217,14 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 obj.QtDebug = false;
             end
             
-            % Create URQt Object
-            
             % Define Qt executable path
             dName = 'urqt';
             fName = 'URQtSupport';
-
             if ~obj.QtDebug
+                % Normal operation
                 obj.QtPath = fullfile(matlabroot,'toolbox',dName,fName);
             else
+                % Debug
                 obj.QtPath = [];%uigetdir(userpath,'Select Roswell "release" directory');
             end
 
@@ -245,36 +244,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             end
             
             % Initialize Qt Interface
-            if ~obj.QtDebug
-                fprintf('Starting Qt interface...');
-                if ~obj.isQtRunning
-                    if ~obj.existQt
-                        fprintf('"%s" not found, FAILED\n',obj.QtEXE);
-                        return
-                    end
-                    % Start Qt interface
-                    obj.startQt;
-                    % Check if Qt interface is running
-                    t0 = tic;
-                    tf = 30;
-                    while ~obj.isQtRunning
-                        % Wait for server to start
-                        t = toc(t0);
-                        if t > tf
-                            fprintf('TIMEOUT\n');
-                            warning('Server did not start successfully.');
-                            return
-                        end
-                    end
-                    fprintf('SUCCESS\n');
-                else
-                    fprintf('SKIPPED\n');
-                    fprintf('\tQt interface is already running.\n');
-                end
-            else
-                fprintf(2,'DEBUG MODE: ')
-                fprintf(2,'*.startQt skipped.\n');
-            end
+            obj.InitializeQt;
             
             % Select robot
             % -> Define supported robot models
@@ -464,11 +434,10 @@ classdef URQt < matlab.mixin.SetGet % Handle
             [tfRmt,tfRsp] = obj.isRemote;
             if tfRsp && ~tfRmt
                 % Arm is not in remote mode
-                msg = [...
+                fprintf([...
                     'Controller is currently in MANUAL mode. Unable to ',...
                     'automatically run POWER ON and BRAKE RELEASE.\n\n',...
-                    'Please proceed manually using the teach pendant.'];
-                fprintf('%s\n',msg);
+                    'Please proceed manually using the teach pendant.\n']);
                 return
             end
 
@@ -476,12 +445,63 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.InitializeArm;
             
         end
-    end % end methods
-    
-    % --------------------------------------------------------------------
-    % General Use
-    % --------------------------------------------------------------------
-    methods(Access='public')
+
+        function InitializeQt(obj)
+            % INITIALIZEQT initializes the Qt executable
+
+            if ~obj.QtDebug
+                fprintf('Starting Qt interface...');
+                if ~obj.isQtRunning
+                    if ~obj.existQt
+                        fprintf('"%s" not found, FAILED\n',obj.QtEXE);
+                        return
+                    end
+                    % Start Qt interface
+                    obj.startQt;
+                    % Check if Qt interface is running
+                    t0 = tic;
+                    tf = 30;
+                    while ~obj.isQtRunning
+                        % Wait for server to start
+                        t = toc(t0);
+                        if t > tf
+                            fprintf('TIMEOUT\n');
+                            warning('Server did not start successfully.');
+                            return
+                        end
+                    end
+                    fprintf('SUCCESS\n');
+                else
+                    fprintf('SKIPPED\n');
+                    fprintf('\tQt interface is already running.\n');
+                end
+            else
+                fprintf(2,'DEBUG MODE: ')
+                fprintf(2,'*.startQt skipped.\n');
+            end
+        end
+
+        function InitializeTCP(obj)
+            % INITIALIZETCP initializes the TCP/IP connection with Rosette.
+
+            % Clear old TCP client(s)
+            if ~isempty( obj.Client )
+                obj.CloseTCP;
+            else
+                % No TCP client exists
+            end
+
+            % TODO - specify and use terminator
+            % TODO - specify terminator callback function
+            fprintf('Initializing TCP Client: IP %s, Port %d...',...
+                obj.IP,obj.Port);
+
+            obj.Client = tcpclient(obj.IP,obj.Port,...
+                'Timeout',obj.Timeout,...
+                'ConnectTimeout',obj.ConnectTimeout);
+            fprintf('SUCCESS\n');
+        end
+
         function InitializeArm(obj)
             % INITIALIZEARM initializes the UR e-Series and Robotiq Hand-E
             % gripper using the Qt command "btnarm". 
@@ -524,6 +544,14 @@ classdef URQt < matlab.mixin.SetGet % Handle
             end
             fprintf('\n');
         end
+        
+    end % end methods
+    
+    % --------------------------------------------------------------------
+    % General Use
+    % --------------------------------------------------------------------
+    methods(Access='public')
+        
         
         function ShutdownArm(obj)
             % SHUTDOWNARM powers off the UR e-Series robot.
@@ -911,6 +939,30 @@ classdef URQt < matlab.mixin.SetGet % Handle
             end
         end
 
+        function UnlockProtectiveStop(obj)
+            % UNLOCKPROTECTIVESTOP removes a protective stop on the
+            % manipulator.
+
+            % TODO - check safety state
+
+            msg = obj.sendCmdDashboard('unlock protective stop');
+
+        end
+
+        function tf = isQtRunning(obj)
+            % ISQTRUNNING checks if the Qt executable is running using the
+            % "tasklist" system command in Windows
+            
+            str = sprintf('tasklist /fi "imagename eq %s"',obj.QtEXE);
+            [~,cmdout] = system(str);
+            % If the server is *not* running, we expect response resembling
+            % the following:
+            %   "INFO: No tasks are running which match the specified
+            %   criteria."
+            tf = ~contains(cmdout,...
+                'No tasks are running which match the specified criteria.');
+        end
+
     end % end methods
     
     % --------------------------------------------------------------------
@@ -1002,6 +1054,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
     end
 
+    % --------------------------------------------------------------------
+    % Private URScript Command Response Method(s)
+    % --------------------------------------------------------------------
     methods(Access='private')
         function out = parseCmdResponse(~,msg)
             expression = '\$(.*?)\$'; % Non-greedy match between $ symbols
@@ -1094,21 +1149,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % --------------------------------------------------------------------
     % Private Methods
     % --------------------------------------------------------------------
-    %methods(Access='private')
-    methods(Access='public') % DEBUG
-        function tf = isQtRunning(obj)
-            % ISQTRUNNING checks if the Qt executable is running using the
-            % "tasklist" system command in Windows
-            
-            str = sprintf('tasklist /fi "imagename eq %s"',obj.QtEXE);
-            [~,cmdout] = system(str);
-            % If the server is *not* running, we expect response resembling
-            % the following:
-            %   "INFO: No tasks are running which match the specified
-            %   criteria."
-            tf = ~contains(cmdout,...
-                'No tasks are running which match the specified criteria.');
-        end
+    methods(Access='private')
+    %methods(Access='public') % DEBUG
         
         function CloseTCP(obj)
             % CLOSETCP closes the TCP/IP connection with Rosette.
@@ -1119,28 +1161,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.Client = [];
             fprintf('SUCCESS\n');
         end
-
-        function InitializeTCP(obj)
-            % INITIALIZETCP initializes the TCP/IP connection with Rosette.
-
-            % Clear old TCP client(s)
-            if ~isempty( obj.Client )
-                obj.CloseTCP;
-            else
-                % No TCP client exists
-            end
-
-            % TODO - specify and use terminator
-            % TODO - specify terminator callback function
-            fprintf('Initializing TCP Client: IP %s, Port %d...',...
-                obj.IP,obj.Port);
-
-            obj.Client = tcpclient(obj.IP,obj.Port,...
-                'Timeout',obj.Timeout,...
-                'ConnectTimeout',obj.ConnectTimeout);
-            fprintf('SUCCESS\n');
-        end
-        
+     
         function tf = killQt(obj)
             % KILLQT "kills" instance(s) of the Qt executable using the 
             % "taskkill /IM" system command in Windows
@@ -1152,8 +1173,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
         end
         
         function tf = existQt(obj)
-            % EXISTQT checks to see if the Qt executable executable exists 
-            % in the existing MATLAB path
+            % EXISTQT checks to see if the Qt executable exists in the 
+            % MATLAB path
             
             str = fullfile(obj.QtPath,obj.QtEXE);
             tf = false;

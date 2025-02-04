@@ -330,12 +330,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.ShutdownArm;
             
             % Close the TCP/IP connection
-            fprintf('Closing TCP Client: IP %s, Port %d...',...
-                obj.IP,obj.Port);
-            client = obj.Client;
-            clear client
-            obj.Client = [];
-            fprintf('SUCCESS\n');
+            obj.CloseTCP;
             
             % Close the Qt interface
             fprintf('Closing Qt interface...');
@@ -420,17 +415,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 fprintf(2,'Fixed wait for Qt Executable skipped.\n');
             end
             
-            % Clear old TCP client(s)
-            if ~isempty( obj.Client )
-                % Clear old TCP client(s)
-                fprintf('Resetting TCP client...');
-                client = obj.Client;
-                obj.Client = [];
-                clear client;
-                fprintf('SUCCESS\n');
-            else
-                % No TCP client exists
-            end
+            % Close TCP/IP
+            obj.CloseTCP;
             
             % Initialize TCP/IP Client settings
             obj.IP = IP_val;
@@ -438,6 +424,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
             obj.Timeout = 5;
             obj.ConnectTimeout = 10;
             
+            % Initialize TCP
+            obj.InitializeTCP;
+
             % Initialize parameters
             obj.WaitOn   = true;
             obj.MoveType = 'LinearJoint';
@@ -473,17 +462,18 @@ classdef URQt < matlab.mixin.SetGet % Handle
             %    NOTE: obj.fcnJacobian_t is set with FrameT (bad practice)
             obj.FrameT = eye(4);
             
-            
-            % TODO - specify and use terminator
-            % TODO - specify terminator callback function
-            fprintf('Initializing TCP Client: IP %s, Port %d...',...
-                obj.IP,obj.Port);
-            
-            obj.Client = tcpclient(obj.IP,obj.Port,...
-                'Timeout',obj.Timeout,...
-                'ConnectTimeout',obj.ConnectTimeout);
-            fprintf('SUCCESS\n');
-            
+            % Check arm status
+            [tfRmt,tfRsp] = obj.isRemote;
+            if tfRsp && ~tfRmt
+                % Arm is not in remote mode
+                msg = [...
+                    'Controller is currently in MANUAL mode. Unable to ',...
+                    'automatically run POWER ON and BRAKE RELEASE.\n\n',...
+                    'Please proceed manually using the teach pendant.'];
+                fprintf('%s\n',msg);
+                return
+            end
+
             % Initialize arm
             obj.InitializeArm;
             
@@ -745,6 +735,184 @@ classdef URQt < matlab.mixin.SetGet % Handle
             fprintf('SUCCESS\n');
             disp(msg);
         end
+
+        function [tf,tfRsp] = isRemote(obj)
+            % ISREMOTE checks if the controller is in remote or local
+            % control mode.
+            %   [tf,tfRsp] = obj.isRemote;
+            %
+            %   Output(s)
+            %          tf - logical scalar that is "true" if the robot is in
+            %               remote mode
+            %       tfRsp - logical scalar that is "true" if the robot
+            %               responded to the command
+            %
+            %   M. Kutzer, 04Feb2025, USNA
+            msg = obj.sendCmdDashboard('is in remote control');
+            
+            if isempty(msg)
+                warning('Controller is not responding.');
+                tf = false;
+                tfRsp = false;
+                return
+            end
+
+            switch lower(msg(1:end-1))
+                case 'true'
+                    tf = true;
+                    tfRsp = true;
+                case 'false'
+                    tf = false;
+                    tfRsp = true;
+                otherwise
+                    warning('Unexpected response.')
+                    tf = false;
+                    tfRsp = false;
+            end
+        end
+
+        function rMode = RobotMode(obj)
+            % ROBOTMODE gets the current mode of the UR controller.
+            %   rMode = obj.RobotMode
+            %
+            %   Output(s)
+            %       rMode - character array describing current robot mode
+            %               [1]
+            %           NO_CONTROLLER
+            %           DISCONNECTED
+            %           CONFIRM_SAFETY
+            %           BOOTING
+            %           POWER_OFF
+            %           POWER_ON
+            %           IDLE
+            %           BACKDRIVE
+            %           RUNNING
+            %
+            %   Reference(s)
+            %       [1] https://s3-eu-west-1.amazonaws.com/ur-support-site/42728/DashboardServer_e-Series_2022.pdf
+            
+            msg = obj.sendCmdDashboard('robotmode');
+            preamble = 'Robotmode: ';
+            
+            if isempty(msg)
+                warning('Controller is not responding.');
+                rMode = '';
+                return
+            end
+
+            if numel(msg) <= numel(preamble)
+                warning('Unexpected response from controller: "%s"',msg);
+                rMode = '';
+                return
+            end
+
+            if ~matches(msg(1:numel(preamble)),preamble)
+                warning('Unexpected response from controller: "%s"',msg);
+                rMode = '';
+                return
+            end
+            
+            idx0 = numel(preamble)+1;
+            idxf = numel(msg)-1;
+            rMode = msg(idx0:idxf);
+
+        end
+
+        function tf = isPowerOff(obj,rMode)
+            % ISPOWEROFF returns true if the robot power is off.
+            
+            % Set default(s)
+            if nargin < 2
+                rMode = obj.RobotMode;
+            end
+            
+            % Check state
+            if matches(rMode,'POWER_OFF')
+                tf = true;
+            else
+                tf = false;
+            end
+        end
+
+        function tf = isPowerOn(obj,rMode)
+            % ISPOWERON returns true if the robot power is on.
+            % POWER_OFF -> POWER_ON -> BOOTING -> IDLE -> RUNNING
+
+            % Set default(s)
+            if nargin < 2
+                rMode = obj.RobotMode;
+            end
+
+            % Check related states
+            if obj.isRunning(rMode)
+                tf = true;
+                return;
+            end
+            if obj.isIdle(rMode)
+                tf = true;
+                return;
+            end
+            if obj.isBooting(rMode)
+                tf = true;
+                return
+            end
+
+            % Check for exact power-on state
+            if matches(rMode,'POWER_ON')
+                tf = true;
+            else
+                tf = false;
+            end
+        end
+
+        function tf = isBooting(obj,rMode)
+            % ISBOOTING returns true if the robot is booting.
+            
+            % Set default(s)
+            if nargin < 2
+                rMode = obj.RobotMode;
+            end
+            
+            % Check state
+            if matches(rMode,'BOOTING')
+                tf = true;
+            else
+                tf = false;
+            end
+        end
+
+        function tf = isIdle(obj,rMode)
+            % ISIDLE returns true if the robot is idle.
+
+            % Set default(s)
+            if nargin < 2
+                rMode = obj.RobotMode;
+            end
+            
+            % Check state
+            if matches(rMode,'IDLE')
+                tf = true;
+            else
+                tf = false;
+            end
+        end
+
+        function tf = isRunning(obj,rMode)
+            % ISRUNNING returns true if the robot is running.
+            
+            % Set default(s)
+            if nargin < 2
+                rMode = obj.RobotMode;
+            end
+            
+            % Check state
+            if matches(rMode,'RUNNING')
+                tf = true;
+            else
+                tf = false;
+            end
+        end
+
     end % end methods
     
     % --------------------------------------------------------------------
@@ -928,8 +1096,8 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % --------------------------------------------------------------------
     % Private Methods
     % --------------------------------------------------------------------
-    methods(Access='private')
-    %methods(Access='public') % DEBUG
+    %methods(Access='private')
+    methods(Access='public') % DEBUG
         function tf = isQtRunning(obj)
             % ISQTRUNNING checks if the Qt executable is running using the
             % "tasklist" system command in Windows
@@ -942,6 +1110,37 @@ classdef URQt < matlab.mixin.SetGet % Handle
             %   criteria."
             tf = ~contains(cmdout,...
                 'No tasks are running which match the specified criteria.');
+        end
+        
+        function CloseTCP(obj)
+            % CLOSETCP closes the TCP/IP connection with Rosette.
+            fprintf('Closing TCP Client: IP %s, Port %d...',...
+                obj.IP,obj.Port);
+            client = obj.Client;
+            clear client
+            obj.Client = [];
+            fprintf('SUCCESS\n');
+        end
+
+        function InitializeTCP(obj)
+            % INITIALIZETCP initializes the TCP/IP connection with Rosette.
+
+            % Clear old TCP client(s)
+            if ~isempty( obj.Client )
+                obj.CloseTCP;
+            else
+                % No TCP client exists
+            end
+
+            % TODO - specify and use terminator
+            % TODO - specify terminator callback function
+            fprintf('Initializing TCP Client: IP %s, Port %d...',...
+                obj.IP,obj.Port);
+
+            obj.Client = tcpclient(obj.IP,obj.Port,...
+                'Timeout',obj.Timeout,...
+                'ConnectTimeout',obj.ConnectTimeout);
+            fprintf('SUCCESS\n');
         end
         
         function tf = killQt(obj)

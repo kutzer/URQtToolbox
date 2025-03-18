@@ -1441,7 +1441,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 q(1),q(2),q(3),q(4),q(5),q(6),a,v,t,lookAheadTime,gain);
 
             obj.sendMsg(msg);
-            rsp = obj.receiveMsg(1,'value');
+            %rsp = obj.receiveMsg(1,'value');
         end
 
         function SpeedJ(obj,dq)

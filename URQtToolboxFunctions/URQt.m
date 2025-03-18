@@ -515,6 +515,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % POWER_OFF -> IDLE -> RUNNING
 
             % Power on controller
+            %   POWER_OFF -> IDLE
             if obj.isPowerOff
                 obj.PowerOn;
             end
@@ -522,8 +523,11 @@ classdef URQt < matlab.mixin.SetGet % Handle
             tf = obj.CheckSafetyAndRecover;
             if tf
                 % Release the brakes
+                %   IDLE -> RUNNING
                 if obj.isIdle
                     obj.BrakeRelease;
+                else
+                    fprintf('Robot failed to power on.\n');
                 end
             else
                 fprintf('Unable to initialize the arm.\n');
@@ -883,7 +887,18 @@ classdef URQt < matlab.mixin.SetGet % Handle
         function varargout = CheckSafetyAndRecover(obj)
             % CHECKSAFETYANDRECOVER checks the safety status of the robot
             % and attempts to recover.
+            
+            %status = '';
+            %chkMax = 15;
+            %chk = 0;
+            %while isempty(status)
             status = obj.SafetyStatus;
+            %    drawnow;
+            %    chk = chk+1;
+            %    if chk >= chkMax
+            %        break
+            %    end
+            %end
 
             tf = false;
             switch status
@@ -1175,7 +1190,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
         function UnlockProtectiveStop(obj)
             % UNLOCKPROTECTIVESTOP removes a protective stop on the
             % manipulator.
-            fprintf('Waiting for robot to power on...');
+            fprintf('Unlocking protective stop...');
             msg = obj.sendCmdDashboard('unlock protective stop');
             % TODO - check message
             fprintf('SUCCESS\n');
@@ -1196,7 +1211,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                     tfSuccess = true;
                     fprintf('Waiting for robot to power on...');
                     t0 = tic;
-                    tf = 10;
+                    tf = 45;
                     g = gifwait(0,'Waiting for robot to power on...');
                     while ~obj.isIdle
                         g = gifwait(g);
@@ -1205,6 +1220,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                             tfSuccess = false;
                             break
                         end
+                        pause(0.05);
                     end
                     delete(g.fig);
                     if tfSuccess
@@ -1235,7 +1251,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                     tfSuccess = true;
                     fprintf('Waiting for robot to release brakes...');
                     t0 = tic;
-                    tf = 10;
+                    tf = 45;
                     g = gifwait(0,'Waiting for robot to release brakes...');
                     while ~obj.isRunning
                         g = gifwait(g);
@@ -1244,6 +1260,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
                             tfSuccess = false;
                             break
                         end
+                        pause(0.05);
                     end
                     delete(g.fig);
                     if tfSuccess
@@ -1460,12 +1477,11 @@ classdef URQt < matlab.mixin.SetGet % Handle
     % --------------------------------------------------------------------
     % Private Methods
     % --------------------------------------------------------------------
-    %methods(Access='private')
-    methods(Access='public') % DEBUG
+    methods(Access='private')
+    %methods(Access='public') % DEBUG
 
         function CloseTCP(obj)
             % CLOSETCP closes the TCP/IP connection with Rosette.
-
             msg = 'Closing TCP Client';
             [cIP,cPort] = obj.InfoTCP;
             fprintf('%s: IP %s, Port %04d...',msg,cIP,cPort);
@@ -1570,13 +1586,16 @@ classdef URQt < matlab.mixin.SetGet % Handle
                 % Display
                 fprintf('%30s: "%s"\n',funcStr,msgStr);
             end
-
+            
+            % Convert message to unsigned 8-bit integer
             s = uint8(msg);
+            % Reset message flag
+            obj.isTCPmsg = false;
 
             try
+                % Write message
                 write(obj.Client,s);
             catch ME
-
                 % Check Qt & TCP/IP and try to recover
                 tfKnownErr = obj.CheckConnectionAndRecover;
 
@@ -1650,7 +1669,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
             catch ME
                 if ~obj.isQtRunning
                     fprintf('The Qt Executable is not running. Attempting to recover.\n');
-
+                    % TODO - Write recovery 
                 else
                     % Throw error
                     rethrow(ME);

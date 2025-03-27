@@ -1604,20 +1604,39 @@ classdef URQt < matlab.mixin.SetGet % Handle
                     rethrow(ME);
                 end
             end
-
+            
+        end
+        
+        function waitForMsg(obj,timeout)
+            % WAITFORMSG waits for the buffer to contain a non-zero value
+            % or for the isTCPmsg flag to be true.
+            %   waitForMsg(timeout)
+            %
+            %   Input(s)
+            %       timeout - [OPTIONAL] positive scalar defining timeout 
+            %                 in seconds. Default value is 10.
+            %
+            %   Output(s)
+            %       [NONE]
+            %
+            %   M. Kutzer, 27Mar2025
+            
             % Wait for response
-            timeout = 10;
+            if nargin < 2
+                timeout = 10;
+            end
+
             t0 = tic;
-            while isempty(obj.Client.BytesAvailable)
+            while isempty(obj.Client.BytesAvailable) && ~obj.isTCPmsg
                 % Waiting for response from server
                 t = toc(t0);
                 if t > timeout
-                    warning('TIMEOUT - No response received from server');
+                    warning('waitForMsg: Timeout (%.4f s) reached.',timeout);
                     break
                 end
             end
-        end
 
+        end
         function msg = receiveMsg(obj,varargin)
             % RECEIVEMSG receives a message message from the TCP client
             % connected to the TCP Server running in the Qt executable
@@ -1662,6 +1681,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
             % Parse inputs
             dSize = varargin{1};
             dType = varargin{2};
+            
+            % Wait for message
+            obj.waitForMsg;
 
             % Receive message
             try

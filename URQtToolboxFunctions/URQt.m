@@ -160,6 +160,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
         QtPath        % Path of Qt executable
         QtEXE         % Name of Qt executable
         JointHistory  % Previous joint configuration (used with Undo)
+        GripHistory   % Previous grip position (used for isGripMoving)
     end
 
     % --------------------------------------------------------------------
@@ -624,11 +625,13 @@ classdef URQt < matlab.mixin.SetGet % Handle
 
             % Check if Robotiq is currently moving
             % TODO - This depends on a hard-coded pause that is clunky
-            g0 = obj.GripPosition;
-            pause(0.1);
+            dt = 0.1;
+            g0 = obj.GripHistory;
+            pause(dt);
             g1 = obj.GripPosition;
             if g0 == g1
                 tf = false;
+                g0 = [];
             else
                 tf = true;
             end
@@ -2211,6 +2214,9 @@ classdef URQt < matlab.mixin.SetGet % Handle
         obj.sendMsg(msg);
         gPos_uint8 = obj.receiveMsg(1,'value');
         gPos = gPos_uint8 * (52/255);
+
+        % Update grip position
+        obj.GripHistory = gPos;
     end
 
     function set.GripPosition(obj,gPos)
@@ -2353,7 +2359,18 @@ classdef URQt < matlab.mixin.SetGet % Handle
         obj.JointHistory = allJoints;
     end
 
+    function set.GripHistory(obj,gripPos)
+        % Update grip history
+        obj.GripHistory = gripPos;
+    end
 
+    function gripPos = get.GripHistory(obj)
+        if isempty(obj.GripHistory)
+            gripPos = inf;
+        else
+            gripPos = obj.GripHistory;
+        end
+    end
     % GetAccess ------------------------------------------------------
 
     % URmodel - Specified type of Universal Robot Manipulator

@@ -69,6 +69,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
     %   03Mar2022 - Updated appendJointHistory usage
     %   13Feb2024 - Typo correction in joint velocity limits
     %   30Jan2025 - Updated to include arm, gripper, and dashboard commands
+    %   03Apr2025 - Added tfSkipChecks to WaitForGrip
 
     % --------------------------------------------------------------------
     % General properties
@@ -161,6 +162,7 @@ classdef URQt < matlab.mixin.SetGet % Handle
         QtEXE         % Name of Qt executable
         JointHistory  % Previous joint configuration (used with Undo)
         GripHistory   % Previous grip position (used for isGripMoving)
+        tfSkipChecks  % Logical value to skip receive checks
     end
 
     % --------------------------------------------------------------------
@@ -625,13 +627,22 @@ classdef URQt < matlab.mixin.SetGet % Handle
 
             % Check if Robotiq is currently moving
             % TODO - This depends on a hard-coded pause that is clunky
+            
+            % Pause duration
             dt = 0.1;
+            % Prior grip position
             g0 = obj.GripHistory;
+            % Pause
             pause(dt);
+            % Debug
+            if obj.QtDebug
+                fprintf('pause(%.4f)\n',dt);
+            end
+            % Get current grip position
             g1 = obj.GripPosition;
+            % Check grip position
             if g0 == g1
                 tf = false;
-                g0 = [];
             else
                 tf = true;
             end
@@ -668,10 +679,12 @@ classdef URQt < matlab.mixin.SetGet % Handle
             tmpQtDebug = obj.QtDebug;
             obj.QtDebug = false;
             % -> Wait for move
+            obj.tfSkipChecks = true;
             while obj.isGripMoving
                 fprintf('.');
             end
             fprintf('\n');
+            obj.tfSkipChecks = false;
             % -> Restore debug state
             obj.QtDebug = tmpQtDebug;
         end
@@ -1224,6 +1237,10 @@ classdef URQt < matlab.mixin.SetGet % Handle
                             break
                         end
                         pause(0.05);
+                        % Debug
+                        if obj.QtDebug
+                            fprintf('pause(%.4f)\n',0.05);
+                        end
                     end
                     delete(g.fig);
                     if tfSuccess
@@ -1264,6 +1281,10 @@ classdef URQt < matlab.mixin.SetGet % Handle
                             break
                         end
                         pause(0.05);
+                        % Debug
+                        if obj.QtDebug
+                            fprintf('pause(%.4f)\n',0.05);
+                        end
                     end
                     delete(g.fig);
                     if tfSuccess
@@ -1375,19 +1396,25 @@ classdef URQt < matlab.mixin.SetGet % Handle
             if nargin < 2
                 dt = obj.Timeout;
             end
+            
+            if obj.tfSkipChecks
+                dt = 0.1;
+            end
 
             t0 = tic;
             while ~obj.isTCPmsg
                 t = toc(t0);
                 if t >= dt
-                    % Notify user that timeout was reached
-                    fprintf(...
-                        'tcpGetMessage: Timeout (%.4f s) reached.\n',dt);
+                    if ~obj.tfSkipChecks
+                        % Notify user that timeout was reached
+                        fprintf(...
+                            'tcpGetMessage: Timeout (%.4f s) reached.\n',dt);
 
-                    % Check Qt & TCP/IP and try to recover
-                    obj.CheckConnectionAndRecover;
+                        % Check Qt & TCP/IP and try to recover
+                        %obj.CheckConnectionAndRecover;
 
-                    % Return empty message
+                        % Return empty message
+                    end
                     msg = '';
                     return
                 end

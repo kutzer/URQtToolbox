@@ -208,7 +208,7 @@ end
 
 for ii = 1:numel(supportToolboxes)
     try
-        ToolboxUpdate(supportToolboxes{ii});
+        SupportUpdate(supportToolboxes{ii});
     catch ME
         fprintf(2,'[ERROR]\nUnable to install required package: "%s"\n',supportToolboxes{ii});
         fprintf(2,'\t%s\n',ME.message);
@@ -485,8 +485,8 @@ end
 
 % Download and unzip toolbox (GitHub)
 % UPDATED: 07Sep2021, M. Kutzer
-%url = sprintf('https://github.com/kutzer/%sToolbox/archive/master.zip',toolboxName); <--- Github removed references to "master"
-%url = sprintf('https://github.com/kutzer/%sToolbox/archive/refs/heads/main.zip',toolboxName);
+%url = sprintf('https://github.com/kutzer/%s/archive/master.zip',toolboxName); <--- Github removed references to "master"
+%url = sprintf('https://github.com/kutzer/%s/archive/refs/heads/main.zip',toolboxName);
 
 % Check possible branches
 defBranches = {'master','main'};

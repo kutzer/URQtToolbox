@@ -32,10 +32,12 @@ function varargout = URQtToolboxVer
 %   13Feb2024 - Typo correction in URQt class
 %   18Mar2025 - Revised URQt to implement terminators
 %   03Apr2025 - Revised URQt to added tfSkipChecks to WaitForGrip
+%   22May2025 - Updated for local user install
+
 A.Name = 'Universal Robot Qt Toolbox';
-A.Version = '1.2.1';
+A.Version = '1.2.2';
 A.Release = '(R2021a)';
-A.Date = '03-Apr-2025';
+A.Date = '23-May-2025';
 A.URLVer = 1;
 
 msg{1} = sprintf('MATLAB %s Version: %s %s',A.Name, A.Version, A.Release);

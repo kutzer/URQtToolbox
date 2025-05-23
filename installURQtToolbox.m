@@ -32,10 +32,11 @@ supportToolboxes = {...
     };
 
 %% Assign tool/toolbox specific parameters
-dirName = 'plotting';
-toolboxContent  = 'PlottingToolboxFunctions';
-toolboxExamples = 'PlottingToolbox Example SCRIPTS';
-toolboxName = 'Plotting Toolbox';
+dirName = 'urqt';
+toolboxContent  = 'URQtToolboxFunctions';
+toolboxSupport  = 'URQtSupport'; 
+toolboxExamples = 'URQtScripts';
+toolboxName = 'URQt Toolbox';
 toolboxShort = strrep(toolboxName, ' ', '');
 
 %% Define toolbox directory options
@@ -116,6 +117,11 @@ else
     toolboxPath = toolboxPathAdmin;
 end
 
+% Support contents
+if exist('toolboxSupport','var')
+    supportPath = fullfile(toolboxPath,toolboxSupport);
+end
+
 %% Check for toolbox directory
 if isToolbox
     % Apply replaceExisting argument
@@ -154,6 +160,11 @@ end
 %% Migrate toolbox folder contents
 % Toolbox contents
 migrateContent(toolboxContent,toolboxPath,toolboxName);
+% Support contents
+if exist('toolboxSupport','var')
+    migrateContent(toolboxSupport,supportPath,...
+        sprintf('%s Support',toolboxName));
+end
 % Example files
 try
     migrateContent(toolboxExamples,toolboxPathExamples,...

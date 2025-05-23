@@ -359,7 +359,7 @@ catch ME
 end
 
 % Setup temporary file directory
-fprintf('Downloading the %s Toolbox...',toolboxName);
+%fprintf('Downloading the %s Toolbox...',toolboxName);
 tmpFolder = sprintf('%sToolbox',toolboxName);
 pname = fullfile(tempdir,tmpFolder);
 if isfolder(pname)
@@ -473,7 +473,7 @@ catch ME
 end
 
 % Setup temporary file directory
-fprintf('Downloading the %s ...',toolboxName);
+%fprintf('Downloading the %s ...',toolboxName);
 tmpFolder = sprintf('%s',toolboxName);
 pname = fullfile(tempdir,tmpFolder);
 if isfolder(pname)
@@ -497,7 +497,7 @@ for i = 1:numel(defBranches)
         toolboxName,defBranch);
 
     % Download and unzip repository
-    fprintf('Downloading the %s Toolbox ("%s" branch)...',toolboxName,defBranch);
+    fprintf('Downloading the %s Package ("%s" branch)...',toolboxName,defBranch);
     try
         %fnames = unzip(url,pname);
         %urlwrite(url,fullfile(pname,tmpFname));

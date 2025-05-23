@@ -17,10 +17,7 @@ function installURQtToolbox(replaceExisting,skipAdmin)
 %   M. Kutzer, 26Mar2021, USNA
 
 % Updates
-
-
-% TODO - Allow users to create a local version if admin rights are not
-% possible.
+%   22May2025 - Enable local user installation
 
 %% Define support toolboxes
 requiredToolboxes = {...

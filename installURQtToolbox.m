@@ -35,7 +35,6 @@ toolboxSupport  = 'URQtSupport';
 toolboxExamples = 'URQtScripts';
 toolboxName = 'URQt Toolbox';
 toolboxShort = strrep(toolboxName, ' ', '');
-
 %% Define toolbox directory options
 toolboxPathAdmin = fullfile(matlabroot,'toolbox',dirName);
 toolboxPathLocal = fullfile(prefdir,'toolbox',dirName);
@@ -167,12 +166,13 @@ try
     migrateContent(toolboxExamples,toolboxPathExamples,...
         sprintf('%s Examples',toolboxName));
 catch
-    fprintf('Unable to migrate examples.');
+    fprintf('Unable to migrate examples.\n');
 end
 
 %% Save toolbox path
-%addpath(genpath(toolboxRoot),'-end');
-addpath(toolboxPath,'-end');
+addpath(genpath(toolboxPath),'-end'); % Add path with subdirectories
+%addpath(toolboxPath,'-end');         % Add path only
+
 pathdef_local = fullfile(userpath,'pathdef.m');
 if isAdmin
     % Delete local pathdef file
@@ -325,6 +325,17 @@ function removePath(toolboxName,pName,inPath,isPath,isDelete)
 if inPath
     rmpath(pName);
     fprintf('%s path removed successfully:\n\t"%s"\n',toolboxName,pName);
+
+    % Check for subdirectories
+    allPaths = path;
+    allPaths = strsplit(allPaths,pathsep);
+    % Remove subdirectories
+    idxInPath = find( contains(allPaths,pName) );
+    for i = reshape(idxInPath,1,[])
+        sPath = allPaths{i};
+        rmpath(sPath);
+        fprintf(' -> %s subpath removed successfully:\n\t\t"%s"\n',toolboxName,sPath);
+    end
 end
 % Remove folder
 if isPath && isDelete
@@ -569,3 +580,4 @@ end
 fprintf('Installation complete.\n');
 
 end
+

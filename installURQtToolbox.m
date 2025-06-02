@@ -35,6 +35,7 @@ toolboxSupport  = 'URQtSupport';
 toolboxExamples = 'URQtScripts';
 toolboxName = 'URQt Toolbox';
 toolboxShort = strrep(toolboxName, ' ', '');
+
 %% Define toolbox directory options
 toolboxPathAdmin = fullfile(matlabroot,'toolbox',dirName);
 toolboxPathLocal = fullfile(prefdir,'toolbox',dirName);
